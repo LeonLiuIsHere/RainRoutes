@@ -1,54 +1,75 @@
 # Hortons Course Planner
 
-**Team:** Hortons  
 **Course:** CPEN 221A Team Project  
 **Milestone 1:** Design Your Team + Design Your Solution  
-**Team roles:** Tim — Project Manager (PM); Yuki — Design Lead; Stark — Developer Lead. All members contribute across roles.
+**Team:** Hortons  
+**Project Manager:** Tim  
+**Design Lead:** Yuki  
+**Developer Lead:** Stark
 
 ## Mission
 
 Help UBC Computer Engineering students plan their academic path with less effort and choose courses that fit their degree requirements and personal constraints.
 
-## Problem statement (draft; validate with students)
+## Problem statement and evidence
 
-UBC Computer Engineering students must plan courses across multiple terms while accounting for completed courses, prerequisite chains, course offerings, section schedules, and personal constraints. When this information is spread across program requirements, course descriptions, and schedule listings, students may need to compare it manually and can find it difficult to see which courses they are eligible to take and how available sections fit together. This can make course planning time-consuming and may lead to avoidable schedule conflicts or uncertainty about future prerequisites.
+UBC's published course-planning guidance asks students to check program requirements in the Academic Calendar and Academic Progress Report (APR), then build draft timetables in Workday. The guidance says Winter Term 1 and Term 2 require separate saved schedules and recommends keeping multiple schedule options because courses may fill. [UBC Student Services: How to register for courses](https://students.ubc.ca/enrolment/registration/register-courses/). UBC's Course Schedule also publishes course and standard-timetable information by academic period. [UBC Course Schedule](https://courses.students.ubc.ca/standard-timetables).
 
-This is a working problem statement, not a claim that user research has confirmed the scale or frequency of the problem. Hortons will validate it through short interviews with CPEN students and by checking the information sources students currently use. The project will focus on helping students explore possible plans; students remain responsible for confirming official degree requirements and registration details.
+The planning task therefore involves connecting degree progress, prerequisites, term offerings, section times, and backup options. Existing tools already cover parts of this task: Workday supports saved schedules; [UBC Scheduler](https://ubcscheduler.ca/) generates schedules; and the public [UBCGradMap project](https://github.com/Meriadoc-Gradmap/UBCGradMap) visualizes UBC Vancouver course prerequisites and course information. Hortons is not claiming that UBC has no course-planning tools.
+
+**Problem statement:** For UBC Computer Engineering students planning a future term, it can take several steps to connect their own completed coursework and CPEN prerequisite path with courses offered that term, specific section times, and personal schedule preferences. Existing tools provide useful planning features, but the team has not yet established whether CPEN students can easily use them together to identify eligible next courses and compare suitable backup schedules. Hortons will investigate this specific gap before claiming that it is common or burdensome.
+
+### Evidence limits and validation
+
+The points above are verified descriptions of UBC's published process and publicly available tools. They establish that planning information and actions span degree-progress, course, and schedule resources; they do **not** establish how often CPEN students experience difficulty or what impact it has. No Hortons student interviews have been completed yet. The team will validate the unmet-need hypothesis through brief interviews about students' recent planning experiences and by asking them to compare their current tools. Do not present the hypothesis as a confirmed user-research finding.
 
 ## Proposed solution
 
-Hortons Course Planner is an interactive planning tool. A student enters completed or in-progress courses and planning preferences. The tool shows candidate courses whose listed prerequisites are satisfied, available sections, and a draft timetable that respects hard constraints such as prerequisite eligibility and time conflicts. Students can adjust preferences and compare alternatives.
+Hortons Course Planner is a CPEN-focused planning aid. A student selects a target term, enters completed and in-progress courses, and optionally sets schedule preferences. The tool shows candidate courses with a plain-language prerequisite explanation, available sections, and draft timetable alternatives. It labels time conflicts and explains when an option is conditional or cannot be verified from the available data.
 
-The first version will focus on one complete planning flow for CPEN students. Professor ratings, study-buddy matching, dining, laundry, and failed-course recovery are outside the first version unless later research and time permit.
+The tool complements existing official planning and registration systems; it does not make official degree-audit or registration decisions. Students must confirm current requirements and availability in UBC systems before registering.
 
 ## First-version scope
 
 - Collect the student's completed and in-progress courses.
-- Let the student choose a planning term and optional preferences (for example, avoid 8 a.m. classes or finish early on Friday).
-- Show eligible course options with prerequisite explanations.
-- Show sections and flag schedule conflicts.
-- Build a draft weekly timetable and allow the student to compare options.
-- Explain when no matching section is found and let the student relax preferences.
+- Let the student choose a planning term and set optional preferences, such as avoiding 8 a.m. starts or finishing early on Friday.
+- Show candidate courses and explain prerequisite eligibility, conditional status, or unknown data.
+- Show sections for the chosen term and flag overlapping meeting times.
+- Build and compare draft weekly schedules that satisfy hard constraints.
+- When no option satisfies all preferences, show valid alternatives and identify which soft preference each alternative relaxes.
 
-## Evidence and assumptions
+Professor ratings, study-buddy matching, social groups, dining, laundry, and failed-course recovery are outside the first version. The team can reconsider them only after validating the core need and checking the available project time.
 
-No interview results have been recorded yet. Before treating the problem statement as validated, the team should interview CPEN students about a recent course-planning experience, ask what sources they used, and record concrete friction points. See [`INTERVIEW_GUIDE.md`](INTERVIEW_GUIDE.md).
+## Existing tools and the question Hortons will test
 
-Course, prerequisite, instructor, and section data must be checked against current official UBC sources before being shown as current. The team will document which source and term each dataset represents. Professor ratings are excluded from the first version because their source, coverage, and interpretation have not been established.
+- **Workday:** UBC's official system supports saved schedules and registration.
+- **UBC Scheduler:** A public schedule-generation tool for UBC courses.
+- **UBCGradMap:** A public project that visualizes UBC Vancouver course prerequisites and related course details.
 
-## Design specification
+The team should test current versions of these tools with CPEN students before asserting what is missing. Hortons' proposed focus is one CPEN-oriented flow connecting a student's own course history, prerequisite explanations, current-term sections, schedule preferences, and alternative valid schedules. Whether that combination is useful and meaningfully different remains to be validated.
 
-See [`DESIGN_SPEC.md`](DESIGN_SPEC.md) for the user flow, screens, rules, edge cases, and design rationale. The low-fidelity flow sketch is in [`mockups/core-flow.svg`](mockups/core-flow.svg).
+## Design specification and sketch
+
+See [`DESIGN_SPEC.md`](DESIGN_SPEC.md) for the user flow, screen behavior, rules, edge cases, data limits, and research plan. See [`core-flow.svg`](core-flow.svg) for the low-fidelity three-screen flow sketch. The course names and schedule in the sketch are illustrative placeholders, not verified offerings.
+
+## Team roles
+
+- **Tim - Project Manager:** coordinates the team, milestones, communication, and resources.
+- **Yuki - Design Lead:** leads problem understanding, user research, interaction design, sketches, and usability review.
+- **Stark - Developer Lead:** checks technical and data feasibility, leads implementation planning, and supports verification and deployment.
 
 ## Next actions
 
 | Owner | Action | Done when |
 |---|---|---|
-| Tim (PM) | Create the team GitHub repository; add team details and this problem statement to README | Repository is accessible to the course staff and the README has the final problem statement |
-| Yuki (Design Lead) | Conduct and summarize brief CPEN student interviews; refine the problem and design spec | Notes include anonymized evidence and the spec reflects what was learned |
-| Stark (Developer Lead) | Check feasibility of collecting course/prerequisite/section data and identify a small first-term dataset | Data source, term coverage, and limitations are documented |
-| All members | Review this scope and the core flow together | Team agrees what the first version will and will not do |
+| Tim | Create/update the team GitHub repository and place the final README, design specification, and sketch in it | Course staff can access the repository and all links work |
+| Yuki | Interview CPEN students about a recent course-planning experience and summarize anonymized themes | The problem statement reflects actual evidence and notes clearly separate findings from assumptions |
+| Stark | Check official UBC sources and the feasibility of a small CPEN course/prerequisite/section dataset | Source, term coverage, update limitations, and verification approach are documented |
+| All members | Review the proposed gap against existing tools and agree on MVP boundaries | Team agrees what the first version does and does not do |
 
-## Status
+## References
 
-This folder is a repository-ready draft package. Before submission, replace the provisional problem evidence with real interview findings and place the final Markdown files in the team's GitHub repository. Submit the public repository/specification link required by the course.
+1. [UBC Student Services - How to register for courses](https://students.ubc.ca/enrolment/registration/register-courses/) (accessed October 16, 2026).
+2. [UBC Course Schedule - Standard Timetables](https://courses.students.ubc.ca/standard-timetables) (accessed October 16, 2026).
+3. [UBC Scheduler](https://ubcscheduler.ca/) (public tool, accessed October 16, 2026).
+4. [UBCGradMap public repository](https://github.com/Meriadoc-Gradmap/UBCGradMap) (accessed October 16, 2026; a third-party project, not an official UBC service).
