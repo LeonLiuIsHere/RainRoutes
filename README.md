@@ -11,7 +11,7 @@
 **Team:** Hortons  
 **Members:** Tim, Yuki, Stark, Leon, Ryan  
 **Project Manager:** Tim · **Design Lead:** Yuki · **Development Lead:** Stark  
-**Version:** 3.1 — English submission package  
+**Version:** 3.2 — English submission package  
 **Source review and map queries:** October 16, 2026, Vancouver / October 17, 2026, UTC.
 
 > **Current status:** Public-source research, official map queries, three regional map backgrounds, and interface sketches have been assembled. Student interviews, on-site route verification, entrance photography, and door-level access checks are planned next. Survey lines in the illustrations are not verified walking routes. The SVG storyboard (`core-flow.svg`) illustrates the proposed interaction; it is a static design artifact, not an implemented route planner.
@@ -102,6 +102,8 @@ This map uses the official **Imagery** background. The [official map description
 
 The [interface storyboard](core-flow.svg) uses the actual regional maps and illustrates route entry, building and entrance selection, and access-map browsing. It is a design artifact, not completed routing software.
 
+Team members will supplement the storyboard with sketches of the route-results screen and the no-available-route state before submission. These additional sketches are pending; illustrative routes and values will be labelled as examples rather than field findings.
+
 ### Page 1 — Choose a task or enter a trip
 
 - Provide origin, destination, departure date/time, and maximum extra walking time.
@@ -136,7 +138,11 @@ The [interface storyboard](core-flow.svg) uses the actual regional maps and illu
 5. Exclude closed, unauthorized, or unverified restricted indoor segments. Find a baseline feasible route and then a lower-exposure option within the user's detour limit.
 6. Display results as map polylines and passage instructions. Browsing and route planning share the same entrance records.
 
-The proposed initial stack is **HTML/CSS/JavaScript with SVG overlays**. Fixed regional images can support the MVP without campus-wide GIS or live positioning. Routing and schedule checks can initially run in the browser; a server can be added later if shared maintenance or query requirements justify it. [Design Specification](DESIGN_SPEC.md) details the data, computation, and error handling.
+The application will use a **client-server architecture**, as required by the [course project overview](https://ubc-ece.craft.me/cpen221/fall2026/project/b/133A5A11-7F19-4C3D-BFFA-94C087E14D81/Overview). The browser client will use **HTML/CSS/JavaScript with SVG overlays** for input, fixed regional maps, entrance cards, and route display. A server will load the team's reviewed, versioned JSON files, validate route requests, evaluate recorded access rules at estimated arrival times, compute eligible routes, and return structured results over HTTP. Building and entrance information will be served from the same dataset so browsing and routing remain consistent.
+
+The final deployment will support communication between a browser on a user's machine and a server on another machine. Local development may run both components on one computer, but an offline-only page is not the final architecture. The MVP does not require a database or user accounts; file-based data is sufficient for the initial verified network. Fixed map backgrounds do not require GPS or live positioning.
+
+The implementation will use **at least one external library beyond the language's standard libraries**, with its purpose, version, licence, and setup documented. An HTTP server framework is one suitable option; the specific library and server language will be selected during the architecture milestone. HTML, CSS, JavaScript, and SVG alone are not being counted as the external library. This is a planned implementation, not a claim that a server or dependency has already been built or installed. [Design Specification](DESIGN_SPEC.md) details responsibilities, data flow, computation, and error handling.
 
 ## 7. Next fieldwork
 

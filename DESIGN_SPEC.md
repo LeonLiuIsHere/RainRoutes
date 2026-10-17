@@ -1,11 +1,13 @@
 # Hortons Rain Routes — Design Specification
 
-**CPEN 221A · Milestone 1 · Version 3.1**  
+**CPEN 221A · Milestone 1 · Version 3.2**  
 **Team:** Hortons — Tim, Yuki, Stark, Leon, Ryan  
 **PM:** Tim · **Design Lead:** Yuki · **Development Lead:** Stark  
 **Research reference date:** October 16, 2026, Vancouver.
 
 Read with the [README](README.md) and [interface storyboard](core-flow.svg). The behaviours below are proposed requirements. The storyboard illustrates the interaction; this milestone submission does not contain implemented route-query software.
+
+Additional route-results and no-available-route sketches will be supplied by team members before submission. They are pending and are not claimed to be present in the current storyboard. Any illustrative route or numerical value will be identified as an example, not a verified field result.
 
 **Confirmed scope:** User-entered origins, destinations, and times drive route planning and map display. Users manually inspect routes and photographs. There is no GPS reading, live position tracking, automatic instruction advancement, turn notification, deviation detection, or location-permission request. Computation starts at the location the user selects.
 
@@ -174,24 +176,36 @@ Represent a two-way passage with two directed edges, allowing different entry/ex
 
 ### 7.1 Initial architecture
 
-Use a browser interface, versioned local JSON, and SVG layers. Map/entrance browsing does not require a server. Separate data loading, schedule evaluation, routing, and presentation into modules.
+The application will follow the client-server pattern required by the [course project overview](https://ubc-ece.craft.me/cpen221/fall2026/project/b/133A5A11-7F19-4C3D-BFFA-94C087E14D81/Overview). The final deployment will exchange requests and responses between a browser client and a server on different machines. Running both on one computer is acceptable for development, but the server is a planned part of the MVP rather than an optional later addition.
+
+**Browser client:** Collect the supported origin, destination, departure date/time, detour allowance, and permission category; send requests over HTTP; render the regional map, entrance information, returned route geometry, and passage steps. The browser will not obtain a GPS position or track the user.
+
+**Server:** Load the team's reviewed, versioned JSON files; provide building and entrance records for browsing; validate route inputs; evaluate permissions, schedules, exceptions, and record validity at estimated arrival times; compute routes using Section 7.2; and return results, data-version information, and meaningful error/status messages. Browsing and route computation will use the same published data version.
+
+**Data storage:** Keep map metadata, building/entrance records, and the directed route network in files read by the server. A database and user accounts are not required for this MVP. Separate data loading, schedule evaluation, routing, and HTTP handling into modules.
 
 ```text
 Official maps / floor plans / field records
-  → Manually structured and reviewed JSON
-  → Map display and information cards
-  → Time and permission checks
-  → Candidate-path search
-  → Route comparison, polylines, and passage instructions
+  → Team review → Versioned JSON files on server
+
+Browser: manual trip input or access-map selection
+  → HTTP request → Server: input validation and data loading
+  → Server: time/permission checks and candidate-path search
+  → HTTP JSON response: records, routes, steps, status, data version
+  → Browser: map layers, entrance cards, route comparison, instructions
 ```
 
-If centralized maintenance later requires a server, retain the data interface during migration. Accounts, live lock connections, campus-wide GIS, and voice navigation are outside the initial scope.
+For route queries, the response will distinguish a completed search with routes, a completed search with no feasible route under the recorded rules, and an incomplete search. Invalid inputs will receive a clear validation message. Connection or server failures will be shown as a service error with a retry action, not as evidence that no walkable route exists. Do not present an outdated result as a response to a newly changed query.
+
+The implementation will use **at least one external library beyond the standard library**. An HTTP server framework is a suitable candidate. The team will choose the server language and specific library during the architecture milestone and document the dependency's purpose, version, licence, and build/run steps. The browser languages and SVG format do not themselves satisfy this dependency requirement. No library or working server is claimed to be implemented in Milestone 1.
+
+Accounts, live lock connections, campus-wide GIS, and voice navigation are outside the initial scope. Detailed API paths and deployment tooling will be specified during the architecture milestone.
 
 ### 7.2 Proposed search strategy
 
 Start with a small supported network. A shortest-path approach can find a baseline, but edge availability changes with arrival time. Filtering every door once at departure is insufficient.
 
-For an auditable small first version, enumerate candidate paths without repeated nodes while accumulating arrival time, total duration, and exposed distance. At each edge expansion, check permissions, entry/exit windows, and record validity. Find the shortest feasible time, then select the lowest-exposure path within the detour allowance. Edge times are non-negative, allowing over-budget candidates to be pruned.
+For an auditable small first version, the server will enumerate candidate paths without repeated nodes while accumulating arrival time, total duration, and exposed distance. At each edge expansion, check permissions, entry/exit windows, and record validity. Find the shortest feasible time, then select the lowest-exposure path within the detour allowance. Edge times are non-negative, allowing over-budget candidates to be pruned.
 
 Apply a search budget, initially configurable at, for example, 200,000 expansions or three seconds. If it is exhausted before search completion, show **Search incomplete; reduce the search area**. A discovered candidate can be shown, but must not be called optimal. A larger network may later use multi-objective labels with time state. A weighted score must not silently replace the user's explicit detour limit.
 
