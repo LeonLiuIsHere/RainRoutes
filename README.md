@@ -14,7 +14,7 @@
 **Version:** 3.1 — English submission package  
 **Source review and map queries:** October 16, 2026, Vancouver / October 17, 2026, UTC.
 
-> **Current status:** Public-source research, official map queries, three regional map backgrounds, and interface sketches have been assembled. Student interviews, on-site route verification, entrance photography, and door-level access checks are planned next. Survey lines in the illustrations are not verified walking routes. The HTML prototype demonstrates the proposed interaction; it does not implement the route planner.
+> **Current status:** Public-source research, official map queries, three regional map backgrounds, and interface sketches have been assembled. Student interviews, on-site route verification, entrance photography, and door-level access checks are planned next. Survey lines in the illustrations are not verified walking routes. The SVG storyboard (`core-flow.svg`) illustrates the proposed interaction; it is a static design artifact, not an implemented route planner.
 
 ## 1. Mission and problem
 
