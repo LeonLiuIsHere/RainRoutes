@@ -1,157 +1,261 @@
-# Hortons Course Planner - Design Specification
+# Hortons Rain Routes — Design Specification
 
-**Course:** CPEN 221A Team Project  
-**Milestone:** Design Your Solution  
-**Team:** Hortons  
-**Project Manager:** Tim  
-**Design Lead:** Yuki  
-**Developer Lead:** Stark
+**CPEN 221A · Milestone 1 · Version 3.1**  
+**Team:** Hortons — Tim, Yuki, Stark, Leon, Ryan  
+**PM:** Tim · **Design Lead:** Yuki · **Development Lead:** Stark  
+**Research reference date:** October 16, 2026, Vancouver.
 
-## 1. Problem
+Read with the [README](README.md) and [interface storyboard](core-flow.svg). The behaviours below are proposed requirements. The storyboard illustrates the interaction; this milestone submission does not contain implemented route-query software.
 
-UBC's published guidance directs students to check program requirements in the Academic Calendar and Academic Progress Report (APR), then build draft timetables in Workday. UBC says Winter Term 1 and Term 2 require separate saved schedules and recommends preparing multiple schedules because courses may fill. The Course Schedule publishes courses and standard timetables by academic period. See [UBC's registration guidance](https://students.ubc.ca/enrolment/registration/register-courses/) and [UBC Course Schedule](https://courses.students.ubc.ca/standard-timetables).
+**Confirmed scope:** User-entered origins, destinations, and times drive route planning and map display. Users manually inspect routes and photographs. There is no GPS reading, live position tracking, automatic instruction advancement, turn notification, deviation detection, or location-permission request. Computation starts at the location the user selects.
 
-This creates a planning task that connects a student's degree progress and completed courses with prerequisites, term offerings, section times, and backup schedules. Existing tools already support parts of this task: Workday supports saved schedules, [UBC Scheduler](https://ubcscheduler.ca/) generates course schedules, and [UBCGradMap](https://github.com/Meriadoc-Gradmap/UBCGradMap) visualizes UBC Vancouver course prerequisites and course information.
+## 1. Problem, users, and value hypotheses
 
-**Focused problem statement:** For UBC Computer Engineering students planning a future term, it can take several steps to connect their own completed coursework and CPEN prerequisite path with courses offered that term, specific section times, and personal schedule preferences. Existing tools provide useful planning features, but the team has not yet established whether CPEN students can easily use them together to identify eligible next courses and compare suitable backup schedules. Hortons will investigate this specific gap before claiming that it is common or burdensome.
+The target user is a UBC student who has a destination but is unfamiliar with nearby entrances and through-building access. The task may involve several buildings or simply crossing one building from one side to another.
 
-### Evidence and limits
+The application organizes building and entrance information on a map and computes lower-exposure paths on a verified network. Two hypotheses require separate evaluation:
 
-UBC's published pages support the description of the official planning process and the separate planning tasks. The public UBCGradMap repository documents an existing third-party prerequisite-visualization project. These sources do not prove that CPEN students experience the task as difficult, nor do they establish the frequency or impact of any difficulty. Hortons has not yet conducted student interviews. Therefore the unmet-need claim is a hypothesis, not a confirmed finding.
+- **Information value:** Students can identify doors, availability, and internal passages without repeated entry attempts or scattered searches.
+- **Route value:** A feasible alternative reduces exposed walking within an acceptable detour, without errors about floors, permissions, or instructions causing backtracking.
 
-### Research plan
+The README documents evidence and existing tools. Evaluation must compare the proposal with the official map, familiar walking routes, and existing workarounds. The absence of a feature named “rain route” is not sufficient evidence of value.
 
-Conduct brief interviews with CPEN students about a recent course-planning experience. Ask them to describe their steps and tools before showing the Hortons concept. Record anonymized notes and distinguish observed findings from interpretation. Compare the proposed flow with Workday, UBC Scheduler, and UBCGradMap so the team does not assume a feature gap that may not exist.
+## 2. Pilot areas and published coverage
 
-Suggested questions:
+| ID | Candidate buildings / landmarks | Official reference query | Information required before publishing routes |
+|---|---|---|---|
+| A | ESB, KAIS, CEME, MCLD, ICCS, BRIM | BRIM → ESB 365 m; ICCS → ESB 308 m | Door coordinates, actual bridge floors and availability, exposed links to ESB |
+| B | CHEM B/C/D/E, CHPH, HEBB, HENN, IKB | Chemistry B → IKB 354 m | Public passage conditions, floor changes, exposed links between Chemistry and IKB |
+| C | Bus Exchange, LIFE, Nest, Aquatic, SRC / Rec North, IKB | Bus Exchange → IKB 458 m | Relevant doors, building and door schedules, and whether a useful sheltered detour exists |
 
-- Tell us about the last time you planned courses for a term. What did you do first?
-- Which websites, documents, or people did you use, and what did you check in each?
-- What part took the most time or caused uncertainty? Can you give a specific example?
-- How did you check prerequisites and degree requirements?
-- Did schedule conflicts or unavailable sections change your plan? What did you do?
-- What would you still verify in official UBC systems even if you used a planner?
-- After seeing the concept, what seems useful, confusing, or already covered by your current tools?
+The list includes contextual landmarks; it does not imply that every building will participate in routing. Each map publishes its supported buildings, doors, passages, and version. The selected corridor endpoints have been queried on the official map, but no exhaustive entrance-pair calculation has established the farthest pair.
 
-Do not record student numbers or sensitive personal information. A few interviews can provide examples and reveal themes, but should not be described as representative of all CPEN students.
+**Coverage target:** Make three pilot areas browsable. Initially investigate 2–3 key passage buildings or destinations per area and prioritize 2–4 relevant doors per building. Establish one complete, independently reviewable end-to-end route before expanding. Investigate A first; prioritize the others using the evidence collected.
 
-## 2. Solution overview
+## 3. Map presentation
 
-Hortons Course Planner is a CPEN-oriented planning aid for exploring a draft term plan. It accepts completed and in-progress courses, a target term, and optional schedule preferences. It presents candidate courses with prerequisite explanations, available sections, and draft timetable alternatives. It identifies time conflicts and labels conditional or unknown data.
+### 3.1 Backgrounds
 
-The tool complements Workday and other existing resources. It does not replace UBC's official degree audit, advising, course schedule, or registration systems. Each course and section must show its data term and source. Students must confirm official requirements and availability before registration.
+- Use official UBC overhead backgrounds. A/B use Default; C includes Imagery. Default supports label reading, while Imagery helps users recognize buildings and roofs. A later implementation may offer a background switch.
+- Record `map_id/version/source_url/captured_at/image_epoch/width/height` for each fixed image extent. Keep capture date separate from imagery date.
+- Retain the source map's entrance symbols. Added interactive markers have a separate legend so service or accessibility icons are not mistaken for doors.
+- Keep annotations in an independent overlay. Do not obscure the background or describe hand-drawn survey relationships as official recommended routes.
+- Dashed survey relationships are not walking geometry or a distance-measurement source. Published routes require polylines following actual turns and passages.
 
-### Design rationale
+### 3.2 Layers
 
-The proposed value is connecting a student's recorded course history and prerequisite path with term-specific sections and personal scheduling preferences, then comparing valid alternatives. This is a hypothesis about a potential gap, not a claim that existing tools cannot plan schedules. Research will determine whether this combined CPEN-focused flow is useful.
+1. **Buildings:** Name, abbreviation, and selectable outline. Unsupported buildings can remain background landmarks.
+2. **Entrances:** Separate IDs for supported doors. Distinguish verified, unknown, and closed-under-recorded-rules states through text or shape as well as colour.
+3. **Connections:** Separate styles for indoor, covered outdoor, and exposed segments; label floor changes.
+4. **Routes:** Origin/destination, selected and alternative paths, and ordered entry/exit points.
+5. **Survey status:** Show unverified relationships only in the research/design view. Do not treat them as usable paths in published recommendations.
 
-Prerequisite eligibility and meeting-time conflicts are hard constraints. Personal preferences (such as avoiding 8 a.m. starts, finishing early on Friday, or reducing travel between consecutive classes) are soft constraints. If no schedule meets every preference, the interface must show valid alternatives and identify each relaxed preference; it must never silently relax prerequisites or time-conflict rules.
+Images, hit areas, markers, and polylines share a coordinate transform when zoomed or panned. Provide a complete building/entrance list on narrow screens so precise marker selection is not required.
 
-## 3. Primary user and task
+## 4. Pages and user flows
 
-**Primary user:** A UBC Computer Engineering student planning courses for a future term.
+### 4.1 Home: plan a route or browse directly
 
-**Primary task:** Explore courses whose prerequisites appear satisfied and compare valid section schedules that have no time conflicts and match as many personal preferences as possible.
+Provide two clear starting actions. The route form contains:
 
-### Main flow
+| Input | Rule |
+|---|---|
+| Region | A/B/C. Clear previously selected doors that are outside the newly selected region. |
+| Origin and destination | Select supported places. A building can be selected first, followed by a specific entrance. A building centre must not imply passage through walls. |
+| Departure | Date and time in `America/Vancouver`, including daylight-saving handling. Default to the current local time. |
+| Maximum additional walking time | Offer 0, 2, or 5 minutes, or a non-negative custom value. Use it as a route constraint. |
+| Access category | Default to an ordinary visitor. Use recorded permission categories only; do not request a student number or uploaded access card. |
 
-1. Start a plan and select the target term.
-2. Enter courses completed and courses currently in progress.
-3. Add optional preferences, such as avoiding 8 a.m. starts, finishing early on Friday, or preferring shorter travel between consecutive classes.
-4. Review candidate courses with a prerequisite explanation and source/term label.
-5. Select courses and review their sections for the chosen term.
-6. Compare valid section combinations in a weekly timetable.
-7. Adjust selections or preferences and save/export a draft plan if that feature is implemented.
+Provide inline messages for missing locations, identical endpoints, invalid times, and unsupported coverage. **Browse access map** bypasses the route form.
 
-The sketch is in [`core-flow.svg`](core-flow.svg). All course codes, term details, and timetable blocks shown there are illustrative placeholders, not verified current offerings.
+### 4.2 Browse the access map without a complete trip
 
-## 4. Screens and behavior
+Show region switching, building search, layer controls, a legend, and verification dates. Selecting another door does not reset the map. Preserve map extent and the selected time when returning to the list.
 
-### Screen A - Start a plan
+**Select a building:** Display its full name, purpose, supported doors, published building hours, indoor-map link, and actions to inspect passages or select route endpoints.
 
-**Content:** Product title; short explanation; target-term selector; “Start planning” action; note that results are planning guidance and official details must be verified.
+**Select an entrance:** Display:
 
-**Behavior:** The target term is required. If no term is selected, the action remains disabled and an instruction explains what is missing. Selecting an available term starts a new plan.
+| Field | Content and behaviour |
+|---|---|
+| Door identity | Building, door ID, side/orientation, entrance photograph, and floor |
+| Opening/closing schedule | This door's weekly rules and date exceptions; explicitly show Unknown when absent |
+| Computed status | Expected available, closed, permission required, or unknown under recorded rules at the selected time; never a live lock status |
+| Permissions | Public, specified access category, exit-only, or unknown; record entry and exit separately |
+| Passage | Reachable exits, floors, stairs/elevator/bridge, and a link to step descriptions |
+| Evidence | Rule source, sign photographs, observation and review dates, and update status |
+| Actions | Set origin/destination, inspect a single-building passage, or report an issue |
 
-### Screen B - Courses and preferences
+**LIFE example:** The building card may quote published building hours. The door card must separately state that this particular door's schedule and card conditions remain unverified. A weekday 10:00 selection is not enough to label the door confirmed open.
 
-**Content:** Searchable course list; selected completed courses; separate selected in-progress courses; optional preference controls for earliest class start, preferred Friday finish, and travel between campus buildings. Actions: “Show eligible courses” and “Back”.
+**MCLD example:** The MCLD 3008 classroom's keycard rule may be cited as a room-specific record. It must not be applied to the main entrance, other rooms, or bridges.
 
-**Behavior:** A course cannot appear in both completed and in-progress lists. Duplicate selections are ignored with a clear message. Preferences are optional. If no course history is provided, explain that prerequisite-based recommendations will be limited and allow the student to continue if they choose.
+### 4.3 Cross one building
 
-### Screen C - Candidate course options
+Within a building card, choose an entrance and then a supported exit. List the entry floor, turns, necessary vertical movement, and exit location; highlight the relevant doors. If the continuous passage has not been verified, show **Passage information incomplete** rather than drawing a straight line between doors as an instruction.
 
-**Content:** Course cards show course code/title, prerequisite status, a plain-language explanation of satisfied or missing prerequisites, term availability, and official data source/last-checked label. Filters include courses that appear eligible and courses with unmet prerequisites. Action: “Choose sections”.
+Users may inspect exits and photographs without submitting a complete route query or specifying a destination in another area.
 
-**Behavior:** Only courses whose prerequisites are satisfied by completed courses and by the team's documented treatment of in-progress courses are marked eligible. In-progress prerequisites must be labeled conditional, never silently treated as completed. Courses with missing prerequisite data are marked “eligibility unknown” and excluded from confirmed-eligible results. If no courses qualify, explain why and offer to edit course history or inspect unmet prerequisites.
+### 4.4 Compare routes
 
-### Screen D - Section and timetable comparison
+Return no more than two main options:
 
-**Content:** Selected courses and their sections; a weekly timetable; highlighted time conflicts; alternative valid combinations. Each section includes day/time, location if available, instructor if available, and source/term label. Actions: remove a course, change a section, compare another plan, and return to course options.
+- **Baseline:** The feasible path with the shortest estimated time within the same verified dataset and departure conditions.
+- **Lower exposure:** The feasible path with the least exposed distance within baseline time plus the user's detour allowance. Break ties by total time, then number of floor changes.
 
-**Behavior:** A combination with overlapping meeting times is never labeled conflict-free. If building locations are available, distant consecutive classes may be flagged as a travel concern; building distance is a preference warning, not a prerequisite rule. When no schedule satisfies all preferences, show the closest valid schedules and name each relaxed preference. Never silently relax prerequisites or time-conflict rules.
+Each card shows total distance, estimated walking time, exposed distance, additional time, exposed-distance reduction, key doors, and floors. Do not fill unmeasured fields with invented numbers. The official 365/354/458 m research references are neither our algorithm's outputs nor measurements of exposed distance.
 
-### Screen E - Plan summary
+Valid outcomes include two different paths, one path when both options coincide, or a baseline without a verified alternative. Retain map browsing in every case. Deliberately adding an unnecessary detour does not establish a useful innovation.
 
-**Content:** Draft timetable; selected courses and sections; unmet/conditional items, if any; applied preferences; and data-source/term note. Actions: edit plan; print or export a draft if implemented.
+### 4.5 Route details
 
-**Behavior:** Distinguish confirmed eligibility from conditional or unknown data. Remind students to confirm official degree requirements, course offerings, section availability, and registration eligibility with UBC before registering.
+The map and segment cards describe: approach Door A → enter → follow the verified path on the specified floor → take a bridge/stair/elevator → leave through Door B → continue to the next segment. Include recognizable landmarks and photographs where useful.
 
-## 5. Core rules
+Users select steps and view photographs manually. The application does not determine which step they have reached. Users may manually exclude a closed segment and query again, without GPS-based rerouting. Reports enter a review queue rather than immediately changing shared data. State clearly when no alternative is available.
 
-1. Evaluate prerequisite rules using the team's documented course data for the selected term.
-2. Represent completed and in-progress courses separately.
-3. An in-progress prerequisite may produce a conditional recommendation only when the applicable course policy/data supports that interpretation; otherwise eligibility remains unconfirmed.
-4. Treat overlapping meeting times as a hard conflict.
-5. Use preferences to rank or filter otherwise valid options; state when a preference causes options to be omitted.
-6. Surface missing, stale, or ambiguous course data; do not present it as verified.
-7. Identify the data term and source for every course/section result.
-8. Do not store student identifiers or grades in the first version. Course-history input should be limited to what is needed for planning.
+## 5. Access states and evidence
 
-## 6. Error and boundary states
+Availability is not a single Boolean value. Distinguish published rules, a one-time observation, permissions, and live state.
 
-- **No course history:** Explain that recommendations may be incomplete; allow the student to add courses or continue with limited results.
-- **No candidate courses:** Explain that no listed course meets the recorded prerequisites for the chosen term; provide actions to edit course history or inspect unmet prerequisites.
-- **No sections offered:** Show course eligibility separately from section availability; explain when no section data is available for the selected term.
-- **No schedule satisfies preferences:** Show valid alternatives that relax soft preferences and identify the relaxed preference.
-- **Time conflict:** Highlight both conflicting sections and do not label the plan conflict-free.
-- **Unknown prerequisite data:** Mark as unknown, show source status, and exclude it from confirmed recommendations.
-- **Incomplete/inconsistent course selection:** Identify duplicate or conflicting input and let the student correct it without losing other entries.
-- **Data source unavailable or stale:** Show the last successful data date and do not imply the timetable is current.
-- **Empty search result:** Explain that no match was found and offer to clear filters.
+| State | Conditions | Routing treatment |
+|---|---|---|
+| Eligible for recommendation | Passage verified, schedule covers the selected time, permissions match, no applicable closure | Include and describe as expected available under recorded rules |
+| Additional permission required | A documented permission requirement is not matched by the user's category | Exclude; keep its explanation visible in the map |
+| Closed | Time outside the applicable schedule or an active closure | Exclude |
+| Unknown / verification pending | Unclear hours, entry permission, direction, or continuous passage | Exclude restricted indoor segments; retain an unknown-state information card |
+| Outdated record | Review period expired or conflicting evidence unresolved | Flag for review; stop recommending critical affected segments |
 
-## 7. Data and scope
+An unlocked door observed once is stored as `observed_open_at`, not a weekly schedule. Building hours belong to the building record. A door rule needs its own source or verification note.
 
-The MVP needs course descriptions, prerequisite relationships, term offerings, and section meeting times. Instructor names and locations may be included only when available from a current, appropriate source. Before implementation, the developer lead will confirm source access, permitted use, update frequency, and term coverage. The initial dataset should be small enough to verify manually.
+Date-specific exceptions override weekly hours. Check later doors and connections at the estimated time of arrival, not just at departure. The first version does not plan waits for doors to open. Treat candidates that conflict with closing times as infeasible and explain the data boundary.
 
-Do not scrape or reproduce data until the team has checked source terms and technical access. Use official UBC sources as the authority for requirements and registration. Third-party tools are useful comparison points, not authoritative sources.
+## 6. Data model
 
-Professor ratings are excluded from the first version because a dependable, explainable source and its coverage have not been established. Study-buddy matching, social groups, dining, laundry, and failed-course recovery are also outside the first version.
+### 6.1 Maps and buildings
 
-## 8. Success criteria for the design
+```text
+Map: id, version, source_url, captured_at, imagery_date,
+     image_width, image_height, attribution, supported_bounds
+Building: id, names, map_id, polygon[], official_hours,
+          hours_source, hours_valid_dates, indoor_map_url
+```
 
-In a short usability session, a CPEN student who has entered course history can:
+The concept uses pixel/normalized image coordinates for fixed backgrounds, not geographic positioning. If a later version uses geographic layers, maintain the geographic coordinates and projection relationship separately. Screen pixels are not metres.
 
-- identify why a course is shown as eligible, conditional, ineligible, or unknown;
-- find sections for the selected term when data exists;
-- identify timetable conflicts without manual comparison;
-- see when preferences are not met and understand the trade-off behind an alternative;
-- understand that the plan is a draft and where to confirm official information;
-- explain whether the Hortons flow adds value beyond the tools they currently use.
+### 6.2 Entrances
 
-## 9. Open decisions before implementation
+```text
+Door: id, building_id, map_id, x_norm, y_norm, floor,
+      side_label, photos[], enter_rule, exit_rule,
+      weekly_windows, exceptions[], permission_tags[],
+      source_ids[], observed_at, verified_at, reviewer,
+      verification_status, valid_until
+```
 
-- Which CPEN program year/requirements should the first curated dataset cover?
-- Which official UBC source will be used for prerequisites, offerings, and section schedules, and how can it be refreshed?
-- What does the first version add beyond Workday, UBC Scheduler, and UBCGradMap?
-- Will it generate one best-fit schedule or let students compare several valid schedules?
-- Will plans be stored, or will the first version keep them only in the current session?
-- How should courses currently in progress count when evaluating prerequisites?
+Store coordinates as `x / original_width` and `y / original_height`. Changing the map extent requires a new map version and realignment. Door points manually transcribed from official symbols are map-based positions, not GPS measurements.
 
-## 10. References
+### 6.3 Route network
 
-1. [UBC Student Services - How to register for courses](https://students.ubc.ca/enrolment/registration/register-courses/) (accessed October 16, 2026).
-2. [UBC Course Schedule - Standard Timetables](https://courses.students.ubc.ca/standard-timetables) (accessed October 16, 2026).
-3. [UBC Course Schedule - Course Search](https://courses.students.ubc.ca/course-search) (accessed October 16, 2026).
-4. [UBC Scheduler](https://ubcscheduler.ca/) (public tool, accessed October 16, 2026).
-5. [UBCGradMap public repository](https://github.com/Meriadoc-Gradmap/UBCGradMap) (third-party project, accessed October 16, 2026).
+```text
+Node: id, type(door/junction/stair/lift/bridge), building_id,
+      floor, map_id, x_norm, y_norm
+Edge: id, from, to, geometry[], distance_m, walk_seconds,
+      exposed_m, cover_type(indoor/covered/outdoor/unknown),
+      permission_tags[], weekly_windows, exceptions[],
+      source_ids[], verification_status, valid_until,
+      instruction, photo_ids[]
+Source: id, title, url_or_photo, published_at, checked_at,
+        scope(building/door/room/edge), supported_claim
+```
+
+Represent a two-way passage with two directed edges, allowing different entry/exit rules. Use field measurements or reliable map measurements for distance; record stair/elevator time separately. Assign zero exposed metres only to confirmed fully indoor segments. Keep covered outdoor segments distinct, since a roof does not guarantee complete protection from wind-driven rain.
+
+## 7. Architecture and computation
+
+### 7.1 Initial architecture
+
+Use a browser interface, versioned local JSON, and SVG layers. Map/entrance browsing does not require a server. Separate data loading, schedule evaluation, routing, and presentation into modules.
+
+```text
+Official maps / floor plans / field records
+  → Manually structured and reviewed JSON
+  → Map display and information cards
+  → Time and permission checks
+  → Candidate-path search
+  → Route comparison, polylines, and passage instructions
+```
+
+If centralized maintenance later requires a server, retain the data interface during migration. Accounts, live lock connections, campus-wide GIS, and voice navigation are outside the initial scope.
+
+### 7.2 Proposed search strategy
+
+Start with a small supported network. A shortest-path approach can find a baseline, but edge availability changes with arrival time. Filtering every door once at departure is insufficient.
+
+For an auditable small first version, enumerate candidate paths without repeated nodes while accumulating arrival time, total duration, and exposed distance. At each edge expansion, check permissions, entry/exit windows, and record validity. Find the shortest feasible time, then select the lowest-exposure path within the detour allowance. Edge times are non-negative, allowing over-budget candidates to be pruned.
+
+Apply a search budget, initially configurable at, for example, 200,000 expansions or three seconds. If it is exhausted before search completion, show **Search incomplete; reduce the search area**. A discovered candidate can be shown, but must not be called optimal. A larger network may later use multi-objective labels with time state. A weighted score must not silently replace the user's explicit detour limit.
+
+The first version does not plan waiting for opening doors, voluntary mid-trip stops, live congestion, or rain/wind forecasts. Estimated times should identify whether they come from observations or a consistent walking-speed model.
+
+### 7.3 Drawing route geometry
+
+Use the same coordinate system for network geometry and backgrounds. Show different floors through floor controls or segment cards rather than connecting a multi-floor space arbitrarily on one plane. Building-relationship lines belong to the survey view only. Published geometry follows actual passages and exits, not walls, lawns, or unsupported buildings.
+
+## 8. Collection, review, and maintenance
+
+Interview students about actual trips before choosing priority routes. Combine route recording, entrance photography, and door-access checks in each field visit. The immediate work is described in [README Section 7](README.md#7-next-fieldwork); recording fields and review steps are provided here.
+
+1. Build candidate lists from sources: buildings, official entrance symbols, possible bridges, and floor-plan pages.
+2. Record each door's ID, location/side, floor, entry/exit conditions, signs, photographs, and observation time.
+3. Walk each candidate passage continuously, documenting floors, turns, stairs/elevators, and the far-side door. Verify intended directions separately.
+4. Have a second member independently follow the record. Mark conflicts unknown and suspend affected recommendations.
+5. Publish a data version with an editor and reason for each change. Construction, reports, holidays, and policy changes trigger review. A weekly review of critical doors is an initial maintenance proposal; adjust frequency to observed change and effort.
+
+An initial workload budget is 2–3 key buildings and roughly 6–12 doors per area, or 18–36 doors across three areas. These are planning limits, not completed counts. Narrow a complex area to a continuous usable sub-corridor when necessary.
+
+## 9. Planned acceptance scenarios
+
+These are future acceptance criteria. No software or on-site tests are claimed to have been executed for this submission.
+
+| Scenario | Expected behaviour |
+|---|---|
+| Open the map without a route | Select an area, building, or entrance and inspect information |
+| Cross one building | Identify specific doors and floors; do not generate unverified passage instructions |
+| Ordinary visitor encounters card access | Explain and exclude the segment; do not suggest borrowing a card or following someone in |
+| Only building hours are known | Display building hours while keeping the side door unknown |
+| IKB at 21:00 on October 30, 2026 | Apply the date exception instead of recommending entry based on the regular midnight closing time |
+| Arrival after a door closes | Exclude the candidate; do not check departure time alone |
+| No exposure benefit | Do not invent a second path; explain identical options or absence of a verified alternative |
+| Closure, one-way passage, or invalid record | Exclude affected directed edges and update the explanation |
+| Zoomed map or mobile display | Keep markers aligned; provide equivalent list access |
+| Search budget exhausted | Make incompleteness clear and avoid an unresponsive interface |
+
+## 10. Success measures and evaluation plan
+
+Evaluate information value and route value separately:
+
+- **Data quality:** Every recommended door, direction, permission, time rule, and floor has a traceable record; unknown facts never silently become verified.
+- **Map task:** Can a student unfamiliar with a passage find an entrance, identify its constraints, and understand how to cross one building?
+- **Displayed-route task:** Across the three representative trips, can students use the line, instructions, and photographs without GPS? Record wrong doors, backtracking, and completion time.
+- **Benefit:** Compare exposed distance and extra time under the same endpoints, departure conditions, and recording method. Record zero benefit as well as positive findings.
+- **User evaluation:** Invite at least five students as a proposed target, document difficulties and resulting revisions, and acknowledge the small sample.
+
+## 11. Risks and scope reductions
+
+| Risk | Response |
+|---|---|
+| Three areas require too much data | Keep three maps browsable; publish routes for one complete verified corridor first and expand with explicit boundaries |
+| Hours or permissions cannot be established | Preserve Unknown, exclude affected indoor recommendations, retain public outdoor routes |
+| Busy student hub has no useful sheltered alternative | Provide access information without promising an unmeasured route benefit |
+| Official tools already cover similar paths | Compare information detail, actual benefit, and user tasks; reduce low-value features |
+| Access data changes | Record sources, dates, expiry, and reviews; do not claim live door state |
+| Old imagery or floor plans | Distinguish source dates from review dates and check against the site and current rules |
+
+## 12. Delivery sequence and definition of completion
+
+1. **Sources and maps:** Fix the three image extents, data model, area choices, and candidate doors.
+2. **Complete browsing workflow:** Map → building → entrance → single-building passage card, with sources, status, and dates.
+3. **Complete engineering route workflow:** A representative end-to-end trip, on-site passage records, access filtering, baseline/lower-exposure comparison, and instructions.
+4. **Expansion and evaluation:** Extend coverage based on science/student-hub findings; complete user-task evaluation and maintenance documentation.
+
+Each stage is independently reviewable. An unverified route remains unverified even under deadline pressure. Update the README as implementation and fieldwork progress, and record the team's supporting assignments on the task board.
