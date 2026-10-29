@@ -1,0 +1,17 @@
+{
+  "nodes": [
+    { "id": "N-1", "x_norm": 0.1, "y_norm": 0.1, "label": "Test Origin" },
+    { "id": "N-2", "x_norm": 0.2, "y_norm": 0.2, "label": "Test Destination" }
+  ],
+  "edges": [
+    {
+      "id": "E-1",
+      "from": "N-1",
+      "to": "N-2",
+      "distanceM": 100,
+      "walkSeconds": 80,
+      "exposedM": 50,
+      "cover": "outdoor"
+    }
+  ]
+}

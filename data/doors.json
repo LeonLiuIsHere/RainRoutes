@@ -1,0 +1,11 @@
+[
+  {
+    "id": "D-TEST",
+    "buildingId": "B-TEST",
+    "schedule": {
+      "windows": [
+        { "dayOfWeek": "MONDAY", "start": "08:00", "end": "18:00" }
+      ]
+    }
+  }
+]
