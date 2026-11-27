@@ -1,0 +1,10 @@
+{
+  "name": "hortons-rain-routes-client",
+  "private": true,
+  "type": "module",
+  "description": "Client tests for Hortons Rain Routes. No dependencies: uses Node's built-in test runner (Node 22+).",
+  "scripts": {
+    "test": "node --test \"src/test/js/**/*.test.js\"",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-include=\"src/main/resources/public/js/**/*.js\" \"src/test/js/**/*.test.js\""
+  }
+}
