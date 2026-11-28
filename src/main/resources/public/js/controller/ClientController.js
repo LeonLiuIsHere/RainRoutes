@@ -8,32 +8,51 @@ import { RemoteData, OUTCOME, ROUTE_STATUS } from '../model/RemoteData.js';
  * results in ClientState and tells the views what to display. It never
  * decides whether a door is usable or which route is best; the server does.
  *
- * The controller talks to the views through two small interfaces, so that it
- * does not depend on how each view is built (main.js connects them):
+ * The panel has two screens: "plan" (form and route comparison) and "detail"
+ * (steps of one option). Choosing an option opens "detail"; Back returns to "plan".
+ *
+ * The controller talks to the views through two interfaces, so that it does
+ * not depend on how each view is built; main.js connects them to the views.
  *
  * @typedef {Object} UiPort
  * @property {(places: ReadonlyArray<Object>, form: Object) => void} renderHome
- *     Show the route form with these selectable places and these values.
+ *     Offer these places in the form and show these form values.
+ * @property {(endpoints: {origin: string|null, destination: string|null}) => void} showSelectedEndpoints
+ *     Show the chosen origin and destination in the form and on the map.
  * @property {(errors: ReadonlyArray<{field: string, problem: string}>) => void} showFieldErrors
  *     Show each error next to its input; an empty list clears all errors.
  * @property {(mapData: Object, places: ReadonlyArray<Object>) => void} renderMap
  *     Draw the background, building outlines and selectable places.
- * @property {(result: Object, query: Object, onSelectOption: (kind: string) => void) => void} renderRoutes
- *     Show the comparison cards for a route result (also "no route" and
- *     "incomplete" results), labelled with the query they answer.
- * @property {(option: Object, onSelectStep: (index: number) => void) => void} renderRouteDetail
- *     Show the step cards of the selected option.
- * @property {(segments: ReadonlyArray<Object>, highlightedEdgeIds: ReadonlyArray<string>) => void} highlightRoute
- *     Draw the route on the map and emphasize the given edges.
+ * @property {(result: Object, query: Object) => void} renderRoutes
+ *     Show the comparison for a route result (including "no route" and
+ *     "incomplete"), labelled with the query it answers.
+ * @property {(kind: string|null) => void} setSelectedOption
+ *     Mark this option card as selected.
+ * @property {(option: Object) => void} renderRouteDetail
+ *     Show the step cards of an option.
+ * @property {(index: number|null) => void} setSelectedStep
+ *     Mark this step as selected (null: none).
+ * @property {(segments: ReadonlyArray<Object>) => void} drawRoute
+ *     Draw these route segments on the map (empty: no route).
+ * @property {(edgeIds: ReadonlyArray<string>) => void} highlightEdges
+ *     Emphasize these edges of the drawn route (empty: none).
  * @property {() => void} clearRoutes
- *     Remove any route, comparison and step cards from the page.
+ *     Remove the route, comparison and steps from the page.
+ * @property {(screen: 'plan'|'detail') => void} showScreen
+ *     Switch the panel to this screen.
  * @property {(busy: boolean) => void} setBusy
  *     Show or hide that a route search is running.
  * @property {(handler: (form: Object) => void) => void} onSearch
- *     Register the handler for "Find routes"; form has origin, destination,
- *     departure and maxExtraMinutes.
- * @property {(handler: (placeId: string) => void) => void} [onPlaceClick]
- *     Optional: register the handler for clicks on a place on the map.
+ *     "Find routes"; form has origin, destination, departure, maxExtraMinutes.
+ * @property {(handler: (form: Object) => void) => void} onFormChange
+ *     Any change to the form, with the same fields as onSearch.
+ * @property {(handler: (placeId: string) => void) => void} onPlaceClick
+ * @property {(handler: (kind: string) => void) => void} onSelectOption
+ * @property {(handler: (index: number) => void) => void} onSelectStep
+ * @property {(handler: () => void) => void} onBack
+ *     Back from the detail screen.
+ * @property {(handler: () => void) => void} onEditTrip
+ *     "Edit trip" from the comparison (also offered when there is no route).
  *
  * @typedef {Object} MessagePort  Implemented by MessageView.
  * @property {(message: string) => void} showLoading
@@ -41,7 +60,7 @@ import { RemoteData, OUTCOME, ROUTE_STATUS } from '../model/RemoteData.js';
  * @property {(message: string) => void} showInfo
  * @property {() => void} hide
  * @property {(version: string) => void} setDataVersion
- * @property {(handler: () => void) => void} bindRetry
+ * @property {(handler: () => void) => void} onRetry
  */
 
 /** User-facing text shown by the controller. */
@@ -53,6 +72,8 @@ export const TEXT = Object.freeze({
     DATA_UPDATED: 'The map data was updated. Please check your origin and destination, then search again.',
 });
 
+export const SCREEN = Object.freeze({ PLAN: 'plan', DETAIL: 'detail' });
+
 export class ClientController {
     #state;
     #remote;
@@ -62,13 +83,15 @@ export class ClientController {
     #retryAction = null;
     /** True once a route query has been re-sent after a data version change. */
     #resentAfterVersionChange = false;
+    /** True while a route request is waiting for its answer. */
+    #searching = false;
 
     /**
      * Initializes the client controller.
      * @precondition ui implements UiPort and messages implements MessagePort;
      *   state and remoteData, if given, are a ClientState and a RemoteData
-     * @postcondition the controller is created and listens to "Find routes",
-     *   place clicks (if the UI supports them) and Retry; nothing is fetched yet
+     * @postcondition the controller is created and has registered a handler
+     *   for every user action; nothing is fetched yet
      * @param {{ui: UiPort, messages: MessagePort, state?: ClientState, remoteData?: RemoteData}} deps
      */
     constructor({ ui, messages, state = new ClientState(), remoteData = new RemoteData() }) {
@@ -80,23 +103,27 @@ export class ClientController {
         this.#state = state;
         this.#remote = remoteData;
 
-        this.#ui.onSearch((form) => this.handleSearchRoutes(form));
-        if (typeof this.#ui.onPlaceClick === 'function') {
-            this.#ui.onPlaceClick((placeId) => this.handlePlaceClick(placeId));
-        }
-        this.#messages.bindRetry(() => this.retry());
+        ui.onSearch((form) => this.handleSearchRoutes(form));
+        ui.onFormChange((form) => this.handleFormChange(form));
+        ui.onPlaceClick((placeId) => this.handlePlaceClick(placeId));
+        ui.onSelectOption((kind) => this.handleSelectOption(kind));
+        ui.onSelectStep((index) => this.handleSelectStep(index));
+        ui.onBack(() => this.handleBack());
+        ui.onEditTrip(() => this.handleEditTrip());
+        messages.onRetry(() => this.retry());
     }
 
     /**
      * Initializes the application on startup.
      * @precondition the views can be drawn (DOM is loaded)
      * @postcondition resolves to true after the map, places, form and data
-     *   version are displayed; resolves to false after showing a service error
-     *   with Retry. Never rejects.
+     *   version are displayed on the plan screen; resolves to false after
+     *   showing a service error with Retry. Never rejects.
      * @returns {Promise<boolean>}
      */
     async init() {
         this.#retryAction = () => this.init();
+        this.#ui.showScreen(SCREEN.PLAN);
         this.#messages.showLoading(TEXT.LOADING_MAP);
         const loaded = await this.#loadMapAndMeta();
         if (loaded === null) {
@@ -112,9 +139,10 @@ export class ClientController {
      *   their current value)
      * @postcondition if the form is invalid, the field errors are shown and no
      *   request is sent; otherwise the previous result is cleared, a request is
-     *   sent, and when it finishes exactly one of these is shown: the route
-     *   result, the server's field errors, or a service error with Retry.
-     *   A response for an older query is never shown. Never rejects.
+     *   sent, and when it finishes exactly one of these is shown on the plan
+     *   screen: the route result (fastest option selected and drawn), the
+     *   server's field errors, or a service error with Retry. A response for an
+     *   older query is never shown. Never rejects.
      * @param {{origin?: string|null, destination?: string|null,
      *          departure?: string|null, maxExtraMinutes?: number|string|null}} form
      * @returns {Promise<void>}
@@ -131,48 +159,103 @@ export class ClientController {
     }
 
     /**
-     * Handles the user choosing a route option.
-     * @precondition the current result has an option of this kind
-     * @postcondition that option's steps are shown and its route is drawn
-     * @param {string} kind
+     * Handles any change to the form. A search that is still running is
+     * abandoned, so its answer can never be shown for the changed trip.
+     * @precondition form holds the form values (undefined fields are kept)
+     * @postcondition the state holds the new values, the endpoints are shown
+     *   on the map, and no search is running
+     * @param {Object} form
      */
-    handleSelectOption(kind) {
-        this.#state.selectOption(kind);
-        this.#showSelectedOption();
+    handleFormChange(form) {
+        this.#state.applyForm(form);
+        this.#endpointsChanged();
     }
 
     /**
-     * Handles the user choosing a step of the selected option.
-     * @precondition an option is selected and index is a valid step index
-     * @postcondition the step's edges are highlighted on the map
-     * @param {number} index
-     */
-    handleSelectStep(index) {
-        this.#state.selectStep(index);
-        const option = this.#state.getSelectedOption();
-        this.#ui.highlightRoute(option.segments, this.#state.getSelectedStep().edgeIds);
-    }
-
-    /**
-     * Handles a click on a selectable place on the map: the first click sets
-     * the origin, later clicks set the destination.
+     * Handles a click on a selectable place on the map.
      * @precondition none
-     * @postcondition if placeId is a selectable place, it becomes the origin
-     *   (if none is set) or otherwise the destination, and the form is redrawn;
-     *   unknown ids are ignored
+     * @postcondition if there is no origin, the place becomes the origin; else if
+     *   there is no destination and the place is not the origin, it becomes the
+     *   destination; otherwise the trip starts over with the place as origin and
+     *   no destination. The form and map show the endpoints and no search is
+     *   running. Unknown ids are ignored.
      * @param {string} placeId
      */
     handlePlaceClick(placeId) {
         if (this.#state.getPlace(placeId) === null) {
             return;
         }
-        if (this.#state.getOrigin() === null) {
+        const origin = this.#state.getOrigin();
+        if (origin === null) {
             this.#state.setOrigin(placeId);
-        } else {
+        } else if (this.#state.getDestination() === null && placeId !== origin) {
             this.#state.setDestination(placeId);
+        } else {
+            this.#state.setOrigin(placeId);
+            this.#state.setDestination(null);
         }
         this.#ui.showFieldErrors([]);
-        this.#ui.renderHome(this.#state.getPlaces(), this.#state.getForm());
+        this.#endpointsChanged();
+    }
+
+    /**
+     * Handles the user choosing a route option card.
+     * @precondition the current result has an option of this kind
+     * @postcondition the option is selected and drawn, and its steps are shown
+     *   on the detail screen with no step selected
+     * @param {string} kind
+     */
+    handleSelectOption(kind) {
+        this.#state.selectOption(kind);
+        const option = this.#state.getSelectedOption();
+        this.#ui.setSelectedOption(kind);
+        this.#ui.drawRoute(option.segments);
+        this.#ui.highlightEdges([]);
+        this.#ui.renderRouteDetail(option);
+        this.#ui.setSelectedStep(null);
+        this.#ui.showScreen(SCREEN.DETAIL);
+    }
+
+    /**
+     * Handles the user choosing a step of the selected option.
+     * @precondition an option is selected and index is a valid step index
+     * @postcondition the step is marked and its edges are highlighted on the map
+     * @param {number} index
+     */
+    handleSelectStep(index) {
+        this.#state.selectStep(index);
+        this.#ui.setSelectedStep(index);
+        this.#ui.highlightEdges(this.#state.getSelectedStep().edgeIds);
+    }
+
+    /**
+     * Handles Back on the detail screen.
+     * @precondition none
+     * @postcondition the plan screen is shown; the selected option stays
+     *   selected and drawn, and no step is highlighted
+     */
+    handleBack() {
+        if (this.#state.getSelectedOption() !== null) {
+            this.#state.selectStep(null);
+        }
+        this.#ui.setSelectedStep(null);
+        this.#ui.highlightEdges([]);
+        this.#ui.showScreen(SCREEN.PLAN);
+    }
+
+    /**
+     * Handles "Change trip" (offered when there is no route).
+     * @precondition none
+     * @postcondition the route result and field errors are removed from the
+     *   page, any running search is abandoned, the form keeps its values, and
+     *   the plan screen is shown
+     */
+    handleEditTrip() {
+        this.#cancelSearch();
+        this.#state.clearRouteResult();
+        this.#ui.clearRoutes();
+        this.#ui.showFieldErrors([]);
+        this.#ui.showScreen(SCREEN.PLAN);
     }
 
     /**
@@ -191,6 +274,25 @@ export class ClientController {
 
     // ---------------------------------------------------------------- private
 
+    #endpointsChanged() {
+        this.#cancelSearch();
+        this.#ui.showSelectedEndpoints({
+            origin: this.#state.getOrigin(),
+            destination: this.#state.getDestination(),
+        });
+    }
+
+    /** Abandons a running search; its answer will arrive as stale and be ignored. */
+    #cancelSearch() {
+        if (!this.#searching) {
+            return;
+        }
+        this.#searching = false;
+        this.#remote.cancelRoutes();
+        this.#ui.setBusy(false);
+        this.#messages.hide();
+    }
+
     /**
      * Sends the current form as a route query and shows the outcome.
      */
@@ -200,13 +302,16 @@ export class ClientController {
 
         this.#state.clearRouteResult();
         this.#ui.clearRoutes();
+        this.#ui.showScreen(SCREEN.PLAN);
         this.#ui.setBusy(true);
         this.#messages.showLoading(TEXT.SEARCHING);
+        this.#searching = true;
 
         const outcome = await this.#remote.fetchRoutes(request);
         if (outcome.kind === OUTCOME.STALE) {
-            return; // a newer query owns the page now
+            return; // a newer query or a form change owns the page now
         }
+        this.#searching = false;
         this.#ui.setBusy(false);
 
         switch (outcome.kind) {
@@ -214,12 +319,9 @@ export class ClientController {
             this.#messages.hide();
             this.#ui.showFieldErrors(outcome.fields);
             return;
-        case OUTCOME.SERVICE:
-            this.#messages.showError(TEXT.SERVICE_ERROR, { retry: true });
-            return;
         case OUTCOME.OK:
             break;
-        default:
+        default: // OUTCOME.SERVICE, or anything unexpected
             this.#messages.showError(TEXT.SERVICE_ERROR, { retry: true });
             return;
         }
@@ -236,8 +338,11 @@ export class ClientController {
         } else {
             this.#messages.hide();
         }
-        this.#ui.renderRoutes(result, this.#state.getRouteQuery(), (kind) => this.handleSelectOption(kind));
-        this.#showSelectedOption();
+        this.#ui.renderRoutes(result, this.#state.getRouteQuery());
+        const option = this.#state.getSelectedOption();
+        this.#ui.setSelectedOption(option === null ? null : option.kind);
+        this.#ui.drawRoute(option === null ? [] : option.segments);
+        this.#ui.highlightEdges([]);
     }
 
     /**
@@ -286,19 +391,14 @@ export class ClientController {
             this.#messages.setDataVersion(map.data.dataVersion);
             this.#ui.renderMap(this.#state.getMapData(), this.#state.getPlaces());
             this.#ui.renderHome(this.#state.getPlaces(), this.#state.getForm());
+            this.#ui.showSelectedEndpoints({
+                origin: this.#state.getOrigin(),
+                destination: this.#state.getDestination(),
+            });
             return { cleared };
         }
         this.#retryAction = () => this.init();
         this.#messages.showError(TEXT.SERVICE_ERROR, { retry: true });
         return null;
-    }
-
-    #showSelectedOption() {
-        const option = this.#state.getSelectedOption();
-        if (option === null) {
-            return;
-        }
-        this.#ui.renderRouteDetail(option, (index) => this.handleSelectStep(index));
-        this.#ui.highlightRoute(option.segments, []);
     }
 }

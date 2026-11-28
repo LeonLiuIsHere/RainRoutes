@@ -2,9 +2,13 @@
   "name": "hortons-rain-routes-client",
   "private": true,
   "type": "module",
-  "description": "Client tests for Hortons Rain Routes. No dependencies: uses Node's built-in test runner (Node 22+).",
+  "description": "Client tests for Hortons Rain Routes. npm test needs no install (Node 22+). npm run e2e needs 'npm install' once (jsdom).",
   "scripts": {
     "test": "node --test \"src/test/js/**/*.test.js\"",
-    "coverage": "node --test --experimental-test-coverage --test-coverage-include=\"src/main/resources/public/js/**/*.js\" \"src/test/js/**/*.test.js\""
+    "coverage": "node --test --experimental-test-coverage --test-coverage-include=\"src/main/resources/public/js/**/*.js\" \"src/test/js/**/*.test.js\"",
+    "e2e": "node src/test/e2e/client.e2e.js"
+  },
+  "devDependencies": {
+    "jsdom": "24.1.3"
   }
 }

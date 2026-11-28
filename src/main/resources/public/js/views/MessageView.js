@@ -4,7 +4,7 @@
  * information notices, and the data version in the footer.
  *
  * All text is inserted with textContent, never as HTML.
- * Styling hooks for the stylesheet:
+ * Styled by css/views.css (Yuki). Styling hooks:
  *   .message, .message--loading, .message--info, .message--error,
  *   .message__text, .message__retry, .data-version
  */
@@ -74,11 +74,21 @@ export class MessageView {
      *   any earlier handler
      * @param {() => void} handler
      */
-    bindRetry(handler) {
+    onRetry(handler) {
         if (typeof handler !== 'function') {
             throw new TypeError('handler must be a function');
         }
         this.#retryHandler = handler;
+    }
+
+    /**
+     * Same as onRetry; kept for code written against the Milestone 2 stub.
+     * @precondition handler is a function
+     * @postcondition as for onRetry
+     * @param {() => void} handler
+     */
+    bindRetry(handler) {
+        this.onRetry(handler);
     }
 
     /**
