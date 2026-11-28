@@ -30,15 +30,17 @@ export class RouteDetailView {
 
     /**
      * Draws the summary and step cards.
-     * Also accepts the old stub call render(container, route).
+     * Also accepts the stub style render(container, option, onSelectStep).
      * @param {Object|HTMLElement} option
      * @param {Object} [route]
+     * @param {Function} [onSelectStep] same as onStepSelect(callback)
      */
-    render(option, route) {
-        if (option && option.nodeType) { // old style: (container, route)
+    render(option, route, onSelectStep) {
+        if (option && option.nodeType) { // stub style: (container, option, onSelectStep)
             this.container = option;
             option = route;
         }
+        if (typeof onSelectStep === 'function') this.stepHandler = onSelectStep;
         this.option = option || null;
         this.index = -1;
         if (!option) return this.clear();

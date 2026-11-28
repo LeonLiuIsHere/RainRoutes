@@ -87,7 +87,7 @@ export function startDev(els, getScenario) {
     }
 
     home.onSearch(search);
-    messages.onRetry(() => search(lastSearch));
+    messages.bindRetry(() => search(lastSearch));
     cmp.onSelect(openDetail);
     detail.onBack(() => { map.highlightSegments([]); setScreen('plan'); });
     cmp.onEditTrip(() => home.showFieldErrors([]));

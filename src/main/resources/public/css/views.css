@@ -159,15 +159,25 @@ html, body { height: 100%; overflow: hidden; }
 .photo-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 .photo-dialog img { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto; }
 
-/* ---------- MessageView ---------- */
-.msg-region { position: fixed; top: 0; left: 0; right: 0; z-index: 30; }
-.msg { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 10px 16px; font-weight: 700; }
-.msg-error { background: #fbe0da; color: #7a2312; border-bottom: 3px solid var(--exposed); }
-.msg-loading { background: #dfe9ef; border-bottom: 3px solid var(--indoor); }
-.spinner { width: 16px; height: 16px; border: 3px solid var(--line); border-top-color: var(--ink); border-radius: 50%; animation: spin 0.9s linear infinite; }
+/* ---------- MessageView (Ryan's version: .message, .message--loading|info|error, .message__text, .message__retry, .data-version) ---------- */
+.message {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; align-items: center; justify-content: center; gap: 12px;
+    padding: 10px 16px; font-weight: 700;
+}
+.message[hidden] { display: none; }
+.message__text { margin: 0; }
+.message--error { background: #fbe0da; color: #7a2312; border-bottom: 3px solid var(--exposed); }
+.message--loading { background: #dfe9ef; border-bottom: 3px solid var(--indoor); }
+.message--loading .message__text::before {
+    content: ''; display: inline-block; width: 14px; height: 14px; margin-right: 10px; vertical-align: -2px;
+    border: 3px solid var(--line); border-top-color: var(--ink); border-radius: 50%; animation: spin 0.9s linear infinite;
+}
+.message--info { background: var(--warn-bg); color: var(--warn-ink); border-bottom: 3px solid #d9962b; }
+.message__retry { min-height: 36px; padding: 0 14px; border: 2px solid currentColor; border-radius: 8px; background: #fff; color: var(--ink); font-weight: 700; cursor: pointer; }
+.message__retry[hidden] { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
-.msg-footer { margin: 0; padding: 12px 0 0; text-align: center; color: var(--ink-2); font-size: 0.85rem; }
+@media (prefers-reduced-motion: reduce) { .message--loading .message__text::before { animation: none; } }
+.data-version { display: block; padding: 12px 0 0; text-align: center; color: var(--ink-2); font-size: 0.85rem; }
 
 /* ---------- dev page only ---------- */
 .devbar {

@@ -3,22 +3,29 @@ import { h, s } from './dom.js';
 const MIN_ZOOM = 1 / 8; // smallest visible width, as a fraction of the whole map
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
 
+/** Any of the accepted point shapes -> [x, y]. */
+function pt(p) {
+    if (Array.isArray(p)) return [p[0], p[1]];
+    return [p.xNorm ?? p.x_norm ?? p.x, p.yNorm ?? p.y_norm ?? p.y];
+}
+
 /**
  * The map: background image + one SVG overlay (buildings, route lines, places).
  * Everything lives in the SAME svg, so zoom/pan can never misalign layers.
  * All coordinates from the server are normalized (0..1) and get multiplied by the map size here.
  *
  * Talks to ClientController only:
- *   in : renderMap(mapData), renderRoute(segments), highlightSegments(edgeIds), setSelected({origin, destination}),
+ *   in : renderMap(mapData), renderRoute(segments, [highlightedEdgeIds]), highlightSegments(edgeIds), setSelected({origin, destination}),
  *        setBottomInset(px), refit()
  *   out: onPlaceClick(cb)
  *
  * The map fills its container (put it full screen). A bottom sheet may cover the lower part of it:
  * tell the map how tall that is with setBottomInset(px) so routes are fitted into the part you can still see.
  *
- * mapData = { imageUrl, width, height, buildings: [{id, name, outline: [[x,y],...]}],
- *             places: [{id, label, x, y}] }   (x, y are 0..1; x_norm / y_norm also accepted)
- * segment = { edgeId, cover: 'indoor'|'covered'|'outdoor', points: [[x,y],...] }
+ * mapData = { imageUrl, width, height, buildings: [{id, name, outline: [point,...]}], places: [{id, label, x, y}] }
+ *   The image info may also be nested as mapData.map = {imageUrl, imageWidth, imageHeight}.
+ * segment = { edgeId, cover: 'indoor'|'covered'|'outdoor', points: [point,...] }
+ * point   = [x, y]  or  {x, y}  or  {xNorm, yNorm}  or  {x_norm, y_norm}   (all numbers 0..1)
  */
 export class MapView {
     /** @param {HTMLElement} container */
@@ -30,6 +37,7 @@ export class MapView {
         this.k = 1;                 // map units per screen pixel
         this.insetBottom = 0;       // px of the screen covered by the bottom sheet
         this.lastPoints = null;     // last route, so refit() can fit it again
+        this.routeSig = '';         // which route is drawn (its edge ids), to tell a new route from a new highlight
         this.tracked = [];          // markers/labels that must keep the same size on screen
         this.markers = new Map();   // place id -> { g, badge }
         this.selected = { origin: null, destination: null };
@@ -69,19 +77,20 @@ export class MapView {
      * @param {Object} mapData see class comment
      */
     renderMap(mapData) {
-        this.W = mapData.width || 1000;
-        this.H = mapData.height || 1000;
+        const info = mapData.map || mapData; // the image info may be nested
+        this.W = info.width || info.imageWidth || 1000;
+        this.H = info.height || info.imageHeight || 1000;
         this.view = { x: 0, y: 0, w: this.W, h: this.H };
         this.tracked = [];
         this.markers.clear();
         for (const layer of [this.bgLayer, this.buildingLayer, this.placeLayer]) layer.replaceChildren();
 
-        if (mapData.imageUrl) {
-            this.bgLayer.append(s('image', { href: mapData.imageUrl, x: 0, y: 0, width: this.W, height: this.H }));
+        if (info.imageUrl) {
+            this.bgLayer.append(s('image', { href: info.imageUrl, x: 0, y: 0, width: this.W, height: this.H }));
         }
 
         for (const b of mapData.buildings || []) {
-            const pts = b.outline.map(([x, y]) => [x * this.W, y * this.H]);
+            const pts = b.outline.map(pt).map(([x, y]) => [x * this.W, y * this.H]);
             const poly = s('polygon', { class: 'bld', points: pts.map((p) => p.join(',')).join(' ') }, s('title', null, b.name));
             this.buildingLayer.append(poly);
             const cx = pts.reduce((sum, p) => sum + p[0], 0) / pts.length;
@@ -99,23 +108,34 @@ export class MapView {
 
     /**
      * Draws the route lines. Indoor = solid, covered = dashed, outdoor = dotted red (not colour only).
-     * Zooms the map to fit the route.
+     * Zooms the map to fit a NEW route. Calling it again with the same route only changes the highlight,
+     * so choosing a step does not move the map.
      * @param {Array} segments see class comment
+     * @param {string[]} [highlightedEdgeIds] segments to emphasise, the rest are dimmed
      */
-    renderRoute(segments) {
+    renderRoute(segments, highlightedEdgeIds) {
+        segments = segments || [];
+        const sig = segments.map((seg) => seg.edgeId).join('|');
+        if (sig !== '' && sig === this.routeSig) { // same route as before: only the highlight changed
+            this.highlightSegments(highlightedEdgeIds || []);
+            return;
+        }
+        this.routeSig = sig;
         this.routeLayer.replaceChildren();
         const all = [];
-        for (const seg of segments || []) {
-            const pts = seg.points.map(([x, y]) => `${x * this.W},${y * this.H}`).join(' ');
+        for (const seg of segments) {
+            const points = seg.points.map(pt);
+            const str = points.map(([x, y]) => `${x * this.W},${y * this.H}`).join(' ');
             this.routeLayer.append(s('g', { class: `seg seg-${seg.cover}`, 'data-edge-id': seg.edgeId },
-                s('polyline', { class: 'halo', points: pts }),
-                s('polyline', { class: 'line', points: pts }),
+                s('polyline', { class: 'halo', points: str }),
+                s('polyline', { class: 'line', points: str }),
             ));
-            all.push(...seg.points);
+            all.push(...points);
         }
         this.routeLayer.classList.remove('has-highlight');
         this.lastPoints = all.length ? all : null;
         if (all.length) this._fitTo(all); else this.resetView();
+        if (highlightedEdgeIds && highlightedEdgeIds.length) this.highlightSegments(highlightedEdgeIds);
     }
 
     /**
@@ -182,8 +202,9 @@ export class MapView {
     // ---- internals ----
 
     _addPlace(p) {
-        const x = (p.x ?? p.x_norm) * this.W;
-        const y = (p.y ?? p.y_norm) * this.H;
+        const [px, py] = pt(p);
+        const x = px * this.W;
+        const y = py * this.H;
         const onRight = x > this.W * 0.6; // labels on the right edge go to the left of the dot
         const badge = s('text', { class: 'place-badge', x: 0, y: -14 });
         const g = s('g', { class: 'place', tabindex: '0', role: 'button', 'aria-label': `Pick ${p.label}`, 'data-place-id': p.id },
@@ -290,8 +311,8 @@ export class MapView {
     _fitTo(points) {
         const { rw } = this._size();
         const visH = this._visibleHeight();
-        const xs = points.map((p) => p[0] * this.W);
-        const ys = points.map((p) => p[1] * this.H);
+        const xs = points.map((p) => pt(p)[0] * this.W);
+        const ys = points.map((p) => pt(p)[1] * this.H);
         const minX = Math.min(...xs), maxX = Math.max(...xs);
         const minY = Math.min(...ys), maxY = Math.max(...ys);
         const bw = Math.max(maxX - minX, this.W * 0.08); // a tiny route should not zoom in forever

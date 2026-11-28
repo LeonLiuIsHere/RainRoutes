@@ -42,9 +42,12 @@ export class HomeView {
     /**
      * Draws the form.
      * @param {HTMLElement} [container]
+     * @param {Array} [places] same as setPlaces (optional)
+     * @param {Object} [form] same as setValues (optional)
      */
-    render(container) {
+    render(container, places, form_) {
         if (container) this.container = container;
+        if (places) this.places = places;
 
         const originSel = this._placeSelect('origin');
         const destSel = this._placeSelect('destination');
@@ -56,6 +59,7 @@ export class HomeView {
         const readout = h('output', { for: 'f-extra', class: 'extra-readout' }, '2 min');
         slider.addEventListener('input', () => this._showExtra());
 
+        const button = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => this._search() }, 'Find routes');
         const form = h('form', { class: 'home-form', novalidate: true },
             h('h2', null, 'Plan a dry route'),
             this._field('origin', 'From', originSel),
@@ -67,7 +71,7 @@ export class HomeView {
                 h('p', { class: 'hint' }, 'How much longer you will walk to stay drier. 0 means fastest route only.'),
                 h('p', { class: 'field-error', id: 'err-maxExtraMinutes' }),
             ),
-            h('button', { type: 'button', class: 'btn btn-primary', onclick: () => this._search() }, 'Find routes'),
+            button,
         );
 
         // The button handles clicks itself, so it works even where form submit is blocked
@@ -86,9 +90,10 @@ export class HomeView {
             this._setError(name, '');
         });
 
-        this.els = { form, originSel, destSel, departure, slider, readout };
+        this.els = { form, originSel, destSel, departure, slider, readout, button };
         this.container.replaceChildren(form);
         this.setPlaces(this.places);
+        if (form_) this.setValues(form_);
     }
 
     /**
@@ -117,10 +122,27 @@ export class HomeView {
         if ('origin' in values) this.els.originSel.value = values.origin || '';
         if ('destination' in values) this.els.destSel.value = values.destination || '';
         if (values.departure) this.els.departure.value = values.departure;
-        if (typeof values.maxExtraMinutes === 'number') {
-            this.els.slider.value = String(Math.min(Math.max(values.maxExtraMinutes, 0), MAX_EXTRA));
+        const extra = values.maxExtraMinutes === '' ? NaN : Number(values.maxExtraMinutes);
+        if (values.maxExtraMinutes !== null && values.maxExtraMinutes !== undefined && Number.isFinite(extra)) {
+            this.els.slider.value = String(Math.min(Math.max(extra, 0), MAX_EXTRA));
             this._showExtra();
         }
+    }
+
+    /** Same as setValues (the name the controller uses). */
+    setForm(values) {
+        this.setValues(values);
+    }
+
+    /**
+     * Shows that a search is running: the button is disabled so it cannot be pressed twice.
+     * @param {boolean} busy
+     */
+    setBusy(busy) {
+        if (!this.els) return;
+        this.els.button.disabled = Boolean(busy);
+        this.els.button.textContent = busy ? 'Searching…' : 'Find routes';
+        this.els.form.setAttribute('aria-busy', String(Boolean(busy)));
     }
 
     /**

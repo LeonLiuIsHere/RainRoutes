@@ -25,24 +25,38 @@ export class RouteComparisonView {
     }
 
     /**
-     * Draws the result.
-     * Also accepts the old stub call render(optionsArray, selectCallback).
+     * Draws the result. Accepts two call styles:
+     *   render(result, selectCallback)                        result = the whole route result
+     *   render(options, selectCallback, result, query)        what ClientController's main.js uses
+     * An empty list with no result clears the view.
      * @param {Object|Array} result
      * @param {Function} [selectCallback]
+     * @param {Object|null} [fullResult] the whole route result (status, identical, options)
      */
-    render(result, selectCallback) {
-        if (selectCallback) this.selectHandler = selectCallback;
-        if (Array.isArray(result)) result = { status: 'COMPLETE', identical: false, options: result };
+    render(result, selectCallback, fullResult) {
+        if (typeof selectCallback === 'function') this.selectHandler = selectCallback;
+        if (Array.isArray(result)) {
+            if (fullResult) result = { ...fullResult, options: result };
+            else result = result.length ? { status: 'COMPLETE', identical: false, options: result } : null;
+        }
         this.cards.clear();
         if (!result) return this.clear();
 
-        if (result.status === 'NO_FEASIBLE_ROUTE' || !result.options || result.options.length === 0) {
+        const options = result.options || [];
+        if (result.status === 'NO_FEASIBLE_ROUTE') {
             this.selected = null;
             this.container.replaceChildren(this._noRoute());
             return undefined;
         }
+        if (options.length === 0) { // e.g. INCOMPLETE with nothing found yet
+            this.selected = null;
+            this.container.replaceChildren(this._noRoute(
+                result.status === 'INCOMPLETE' ? 'Search incomplete' : 'No route found',
+                result.status === 'INCOMPLETE' ? 'The search stopped before it found a route. Try again, or pick places that are closer together.' : null,
+            ));
+            return undefined;
+        }
 
-        const options = result.options;
         this.selected = options[0].kind;
         const list = h('ul', { class: 'option-list' }, ...options.map((o) => h('li', null, this._card(o))));
         const note = options.length === 1
@@ -105,10 +119,10 @@ export class RouteComparisonView {
         return btn;
     }
 
-    _noRoute() {
+    _noRoute(title = 'No open route at that time', text = null) {
         return h('div', { class: 'empty', role: 'status' },
-            h('h2', null, 'No open route at that time'),
-            h('p', null, 'Some doors on the way are closed or have no recorded hours. Try a later time, or different places.'),
+            h('h2', null, title),
+            h('p', null, text || 'Some doors on the way are closed or have no recorded hours. Try a later time, or different places.'),
             h('button', {
                 type: 'button', class: 'btn',
                 onclick: () => { if (this.editHandler) this.editHandler(); },
