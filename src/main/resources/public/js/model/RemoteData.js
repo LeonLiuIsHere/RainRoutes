@@ -30,7 +30,7 @@
  * @typedef {{dataVersion: string, places: Place[]}} Meta
  * @typedef {{dataVersion: string, map: MapInfo, buildings: Building[], places: Place[]}} MapData
  * @typedef {{edgeId: string, cover: string, points: Point[]}} Segment
- * @typedef {{text: string, edgeIds: string[]}} Step  (optional extra fields are kept)
+ * @typedef {{text: string, edgeIds: string[]}} Step  (plus the optional fields of parseStepExtras)
  * @typedef {{kind: string, optimal: boolean, distanceM: number, walkSeconds: number,
  *            exposedM: number, extraSeconds: number, exposureReductionM: number,
  *            segments: Segment[], steps: Step[]}} RouteOption
@@ -212,6 +212,40 @@ function parseKind(value, where) {
     return kind;
 }
 
+/**
+ * The optional step fields that RouteDetailView shows (title, cover, card reader,
+ * opening hours, a "not verified yet" note, written details and photos).
+ * A field that is missing or has the wrong type is left out, so a server that
+ * does not send them still works. (Written by Yuki.)
+ * @precondition so is an object
+ * @postcondition returns only the extra fields that are present and valid
+ * @param {Object} so the step object from the server
+ * @returns {Object}
+ */
+export function parseStepExtras(so) {
+    const extras = {};
+    for (const key of ['title', 'hours', 'pending']) {
+        if (typeof so[key] === 'string' && so[key] !== '') {
+            extras[key] = so[key];
+        }
+    }
+    if (typeof so.cover === 'string') {
+        extras.cover = so.cover.toLowerCase();
+    }
+    if (typeof so.cardReader === 'boolean') {
+        extras.cardReader = so.cardReader;
+    }
+    if (Array.isArray(so.details)) {
+        extras.details = so.details.filter((d) => typeof d === 'string');
+    }
+    if (Array.isArray(so.photos)) {
+        extras.photos = so.photos
+            .filter((p) => p !== null && typeof p === 'object' && typeof p.url === 'string')
+            .map((p) => ({ id: String(p.id ?? ''), url: p.url, caption: String(p.caption ?? '') }));
+    }
+    return extras;
+}
+
 function parseOption(value, where) {
     const o = requireObject(value, where);
     const segments = requireArray(o.segments ?? [], `${where}.segments`).map((s, i) => {
@@ -226,11 +260,10 @@ function parseOption(value, where) {
     const steps = requireArray(o.steps ?? [], `${where}.steps`).map((s, i) => {
         const sw = `${where}.steps[${i}]`;
         const so = requireObject(s, sw);
-        // Optional extra fields (title, cover, photos, hours, ...) are kept for the views.
         return {
-            ...so,
             text: requireString(so.text, `${sw}.text`),
             edgeIds: requireArray(so.edgeIds ?? [], `${sw}.edgeIds`).map((e, j) => requireString(e, `${sw}.edgeIds[${j}]`)),
+            ...parseStepExtras(so),
         };
     });
     return {

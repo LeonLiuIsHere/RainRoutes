@@ -1,12 +1,12 @@
 # Client integration notes
 
 Owner: Ryan (ClientController, ClientState, RemoteData, MessageView, main.js, index.html).
-Checked against Yuki's views in PR #3 (`yuki-views`).
+Checked against Yuki's views as merged into `main` (PR #3, including her update of Nov 27).
 
 ## Tests
 
 ```
-npm test            # 74 unit tests, Node 22+, no install needed
+npm test            # 75 unit tests, Node 22+, no install needed
 npm run coverage    # unit tests plus a coverage table
 npm install         # once, for the next command (installs jsdom)
 npm run e2e         # end-to-end: real index.html + Yuki's views + client code in jsdom,
@@ -32,8 +32,11 @@ Element ids (`ELEMENT_IDS` in `main.js`): `app`, `map`, `layout`, `home`, `cmp`,
 - segment: `{edgeId, cover: 'indoor' | 'covered' | 'outdoor', points: [[x, y]]}`
 - step: `{text, edgeIds}` plus any optional fields the server sends (`title`, `cover`, `photos`, `hours`, ...)
 
-MessageView is Yuki's version (same DOM and CSS classes) plus `showInfo(text)`
-and `showError(text, {retry})`. Use this file when merging PR #3.
+MessageView uses the class names that `css/views.css` styles (`.message`,
+`.message--loading|info|error`, `.message__text`, `.message__retry`, `.data-version`),
+and has `onRetry` (the name in Yuki's interface) plus `bindRetry`. Optional step
+fields (title, cover, cardReader, hours, pending, details, photos) are checked by
+`parseStepExtras` in RemoteData (written by Yuki) and passed to RouteDetailView.
 
 ## Server (Leon, Stark)
 

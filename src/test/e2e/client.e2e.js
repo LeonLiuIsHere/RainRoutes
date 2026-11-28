@@ -6,6 +6,9 @@ import fs from 'node:fs';
 const html = fs.readFileSync(new URL('../../main/resources/public/index.html', import.meta.url), 'utf8').replace(/<script type="module".*<\/script>/, '');
 const dom = new JSDOM(html, { url: 'http://localhost:7070/', pretendToBeVisual: true });
 const { window } = dom;
+// Import main.js before the browser globals exist, so its auto-start does not run;
+// the test calls start() itself below.
+const { start } = await import('../../main/resources/public/js/main.js');
 for (const k of ['window', 'document', 'HTMLElement', 'SVGElement', 'Node', 'Event', 'KeyboardEvent', 'MouseEvent', 'getComputedStyle', 'requestAnimationFrame']) {
   globalThis[k] = k === 'window' ? window : window[k];
 }
@@ -36,7 +39,6 @@ routeReply = { dataVersion: 'v1', status: 'COMPLETE', identical: false, options:
   opt('FASTEST', 0, [['E-10', 'outdoor']], [['Walk 640 m outdoors.', ['E-10']]]),
   opt('LOWER_EXPOSURE', 90, [['E-01', 'indoor'], ['E-05', 'outdoor']], [['Go through ICICS.', ['E-01']], ['Walk the garden path.', ['E-05']]]) ] };
 
-const { start } = await import('../../main/resources/public/js/main.js');
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -46,7 +48,7 @@ await start(document);
 await tick();
 check('form has the places', $$('#f-origin option').length === 4);
 check('map draws the places', $$('#map svg *').length > 5, `(${$$('#map svg *').length} svg nodes)`);
-check('footer shows data version', $('.msg-footer').textContent === 'Data version v1');
+check('footer shows data version', $('.data-version').textContent === 'Data version v1');
 check('layout became the bottom sheet', $('#layout').classList.contains('sheet') && $('#layout').dataset.screen === 'plan');
 
 // 1. invalid: same place twice
@@ -58,12 +60,13 @@ check('nothing sent', sent.length === 0);
 // 2. valid search
 $('#f-destination').value = 'N-H';
 [...document.querySelectorAll('button')].find((b) => b.textContent === 'Find routes').click();
-check('loading banner while waiting', !!$('.msg-loading .spinner'));
+check('Find routes disabled while searching', [...document.querySelectorAll('button')].some((b) => b.textContent === 'Searching…' && b.disabled));
+check('loading banner while waiting', !$('.message').hidden && $('.message').className.includes('message--loading'));
 await tick(); await tick();
 check('request body', JSON.stringify(sent[0]) === JSON.stringify({ origin: 'N-A', destination: 'N-H', maxExtraMinutes: 2, departure: sent[0].departure }) && /T\d\d:\d\d$/.test(sent[0].departure), JSON.stringify(sent[0]));
 check('two option cards', $$('#cmp button.option').length === 2);
 check('first card selected', $$('#cmp button.option')[0].getAttribute('aria-pressed') === 'true');
-check('banner hidden after result', $('.msg-region').children.length === 0);
+check('banner hidden after result', $('.message').hidden);
 
 // 3. open the driest card -> detail screen
 $$('#cmp button.option')[1].click(); await tick();
@@ -84,10 +87,10 @@ check('change trip clears it, keeps form', $('#cmp').children.length === 0 && $(
 // 5. service error, then Retry
 routeReply = 'ERROR';
 [...document.querySelectorAll('button')].find((b) => b.textContent === 'Find routes').click(); await tick(); await tick();
-check('error banner with Retry', !!$('.msg-error') && [...document.querySelectorAll('.msg-error button')].some((b) => b.textContent === 'Retry'));
+check('error banner with Retry', $('.message').className.includes('message--error') && !$('.message__retry').hidden);
 routeReply = { dataVersion: 'v1', status: 'COMPLETE', identical: true, options: [opt('FASTEST', 0, [['E-10', 'outdoor']], [['Walk.', ['E-10']]])] };
-document.querySelector('.msg-error button').click(); await tick(); await tick();
-check('retry shows the route', $$('#cmp button.option').length === 1 && $('.msg-region').children.length === 0);
+$('.message__retry').click(); await tick(); await tick();
+check('retry shows the route', $$('#cmp button.option').length === 1 && $('.message').hidden);
 check('identical note', $('#cmp').textContent.includes('same'));
 
 // 6. form change abandons nothing when idle; map click sets endpoints

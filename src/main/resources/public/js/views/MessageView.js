@@ -1,13 +1,12 @@
 /**
  * Shows messages that are not tied to one form input (architecture §2.1):
- * loading, service errors with Retry, information notices, and the data
- * version in the footer.
+ * loading indicators, "Service error, please retry" with a Retry button,
+ * information notices, and the data version in the footer.
  *
- * Built on Yuki's MessageView: same constructor, same DOM and CSS classes
- * (.msg-region, .msg, .msg-error, .msg-loading, .spinner, .msg-footer), so
- * css/views.css styles it. Added: showInfo(), and the {retry} option of showError().
- *
- * All text is inserted as text, never as HTML.
+ * All text is inserted with textContent, never as HTML.
+ * Styled by css/views.css (Yuki). Styling hooks:
+ *   .message, .message--loading, .message--info, .message--error,
+ *   .message__text, .message__retry, .data-version
  */
 export const MESSAGE_TYPE = Object.freeze({
     LOADING: 'loading',
@@ -16,28 +15,56 @@ export const MESSAGE_TYPE = Object.freeze({
 });
 
 export class MessageView {
-    #doc;
-    #banner;
-    #footer;
+    #root;
+    #text;
+    #retryButton;
+    #versionElement;
     /** @type {(() => void)|null} */
     #retryHandler = null;
     /** @type {string|null} */
     #type = null;
 
     /**
-     * @precondition container is an element in a document; footerContainer is
-     *   an element in the same document (default: container)
-     * @postcondition an empty message banner is placed at the start of container,
-     *   and an empty data-version line at the end of footerContainer
+     * Builds the message area inside container.
+     * @precondition container is an element in a document; footer is null or
+     *   an element in the same document
+     * @postcondition the message area is created, empty and hidden; if footer
+     *   is given, a data-version line is added to it
      * @param {HTMLElement} container
-     * @param {HTMLElement} [footerContainer]
+     * @param {HTMLElement|null} [footer]
      */
-    constructor(container, footerContainer = container) {
-        this.#doc = container.ownerDocument;
-        this.#banner = this.#el('div', { class: 'msg-region' });
-        this.#footer = this.#el('p', { class: 'msg-footer' });
-        container.prepend(this.#banner);
-        footerContainer.append(this.#footer);
+    constructor(container, footer = null) {
+        const doc = container.ownerDocument;
+
+        this.#root = doc.createElement('div');
+        this.#root.className = 'message';
+        this.#root.hidden = true;
+        // Polite by default; errors switch to assertive in #show.
+        this.#root.setAttribute('aria-live', 'polite');
+
+        this.#text = doc.createElement('p');
+        this.#text.className = 'message__text';
+
+        this.#retryButton = doc.createElement('button');
+        this.#retryButton.type = 'button';
+        this.#retryButton.className = 'message__retry';
+        this.#retryButton.textContent = 'Retry';
+        this.#retryButton.hidden = true;
+        this.#retryButton.addEventListener('click', () => {
+            if (this.#retryHandler !== null) {
+                this.#retryHandler();
+            }
+        });
+
+        this.#root.append(this.#text, this.#retryButton);
+        container.append(this.#root);
+
+        this.#versionElement = null;
+        if (footer !== null) {
+            this.#versionElement = doc.createElement('span');
+            this.#versionElement.className = 'data-version';
+            footer.append(this.#versionElement);
+        }
     }
 
     /**
@@ -65,100 +92,86 @@ export class MessageView {
     }
 
     /**
-     * Displays an error banner.
+     * Displays an error message to the user.
      * @precondition message is a non-empty string
-     * @postcondition the message is shown as an alert; a Retry button is shown
-     *   iff options.retry is true and a Retry handler is registered
-     * @param {string} message say what went wrong and what to do
+     * @postcondition the message is shown as an error and announced to screen
+     *   readers; the Retry button is shown iff options.retry is true
+     * @param {string} message
      * @param {{retry?: boolean}} [options]
      */
     showError(message, { retry = true } = {}) {
-        requireText(message);
-        const button = retry && this.#retryHandler !== null
-            ? this.#el('button', { type: 'button', class: 'btn' }, 'Retry')
-            : null;
-        if (button !== null) {
-            button.addEventListener('click', () => this.#retryHandler());
-        }
-        this.#show(MESSAGE_TYPE.ERROR,
-            this.#el('div', { class: 'msg msg-error', role: 'alert' }, this.#el('span', null, message), button));
+        this.#show(MESSAGE_TYPE.ERROR, message);
+        this.#retryButton.hidden = !retry;
     }
 
     /**
      * Displays a notice that is not an error, e.g. "Search incomplete".
-     * It uses the loading banner's look without the spinner.
      * @precondition message is a non-empty string
-     * @postcondition the message is shown as a status; no Retry button
+     * @postcondition the message is shown as information; no Retry button
      * @param {string} message
      */
     showInfo(message) {
-        requireText(message);
-        this.#show(MESSAGE_TYPE.INFO,
-            this.#el('div', { class: 'msg msg-loading msg-info', role: 'status' }, this.#el('span', null, message)));
+        this.#show(MESSAGE_TYPE.INFO, message);
+        this.#retryButton.hidden = true;
     }
 
     /**
-     * Displays a loading indicator.
-     * @precondition text is a non-empty string
-     * @postcondition a spinner and the text are shown as a status
-     * @param {string} [text]
+     * Displays a loading status indicator.
+     * @precondition message is a non-empty string
+     * @postcondition the loading text is shown and the area is marked busy;
+     *   no Retry button
+     * @param {string} [message]
      */
-    showLoading(text = 'Finding routes…') {
-        requireText(text);
-        this.#show(MESSAGE_TYPE.LOADING,
-            this.#el('div', { class: 'msg msg-loading', role: 'status' },
-                this.#el('span', { class: 'spinner', 'aria-hidden': 'true' }), this.#el('span', null, text)));
+    showLoading(message = 'Loading…') {
+        this.#show(MESSAGE_TYPE.LOADING, message);
+        this.#retryButton.hidden = true;
+        this.#root.setAttribute('aria-busy', 'true');
     }
 
     /**
-     * Hides any message.
+     * Hides any active loading or message indicators.
      * @precondition none
-     * @postcondition the banner is empty
+     * @postcondition the message area is hidden and empty
      */
     hide() {
         this.#type = null;
-        this.#banner.replaceChildren();
+        this.#root.hidden = true;
+        this.#root.removeAttribute('aria-busy');
+        this.#text.textContent = '';
+        this.#retryButton.hidden = true;
     }
 
     /**
-     * @precondition version is a string
-     * @postcondition the footer reads "Data version <version>", or is empty for ''
+     * Shows the data version in the footer.
+     * @precondition version is a non-empty string
+     * @postcondition the footer reads "Data version <version>" if a footer was given
      * @param {string} version
      */
     setDataVersion(version) {
-        this.#footer.textContent = version ? `Data version ${version}` : '';
+        if (this.#versionElement !== null) {
+            this.#versionElement.textContent = `Data version ${version}`;
+        }
     }
 
     /**
      * @precondition none
-     * @postcondition returns the type of the message shown, or null if none
+     * @postcondition returns the type of the message shown, or null if hidden
      * @returns {string|null}
      */
     getCurrentType() {
         return this.#type;
     }
 
-    #show(type, node) {
+    #show(type, message) {
+        if (typeof message !== 'string' || message === '') {
+            throw new TypeError('message must be a non-empty string');
+        }
         this.#type = type;
-        this.#banner.replaceChildren(node);
-    }
-
-    /** Builds an element with attributes and text/element children. */
-    #el(tag, attrs, ...kids) {
-        const el = this.#doc.createElement(tag);
-        for (const [key, value] of Object.entries(attrs ?? {})) {
-            el.setAttribute(key, value);
-        }
-        for (const kid of kids) {
-            if (kid === null || kid === undefined) continue;
-            el.append(typeof kid === 'string' ? this.#doc.createTextNode(kid) : kid);
-        }
-        return el;
-    }
-}
-
-function requireText(text) {
-    if (typeof text !== 'string' || text === '') {
-        throw new TypeError('message must be a non-empty string');
+        this.#root.className = `message message--${type}`;
+        this.#root.setAttribute('aria-live', type === MESSAGE_TYPE.ERROR ? 'assertive' : 'polite');
+        this.#root.setAttribute('role', type === MESSAGE_TYPE.ERROR ? 'alert' : 'status');
+        this.#root.removeAttribute('aria-busy');
+        this.#text.textContent = message;
+        this.#root.hidden = false;
     }
 }

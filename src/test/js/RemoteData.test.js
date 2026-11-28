@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     RemoteData, OUTCOME, SERVICE_REASON, parseMeta, parseMapData, parseRouteResult,
-    parseValidationError, ProtocolError,
+    parseValidationError, ProtocolError, parseStepExtras,
 } from '../../main/resources/public/js/model/RemoteData.js';
 
 /** A response object as returned by fetch. */
@@ -125,6 +125,22 @@ describe('parsers', () => {
         bad((r) => { r.options = 'none'; });
         assert.throws(() => parseRouteResult(null), ProtocolError);
         assert.throws(() => parseRouteResult([]), ProtocolError);
+    });
+
+    test('optional step fields are kept when valid and dropped when not', () => {
+        const r = structuredClone(ROUTE);
+        r.options[0].steps[0] = {
+            text: 'Enter ICCS.', edgeIds: ['E1'], title: 'ICCS north door', cover: 'INDOOR', cardReader: true,
+            hours: 'Mon–Fri 07:00–22:00', pending: '', details: ['Push the left door', 3],
+            photos: [{ id: 'P1', url: 'images/p1.jpg', caption: 'Door' }, { id: 'P2' }, null], secret: 'dropped',
+        };
+        assert.deepEqual(parseRouteResult(r).options[0].steps[0], {
+            text: 'Enter ICCS.', edgeIds: ['E1'], title: 'ICCS north door', hours: 'Mon–Fri 07:00–22:00',
+            cover: 'indoor', cardReader: true, details: ['Push the left door'],
+            photos: [{ id: 'P1', url: 'images/p1.jpg', caption: 'Door' }],
+        });
+        assert.deepEqual(parseStepExtras({ text: 't' }), {});
+        assert.deepEqual(parseStepExtras({ photos: [{ url: 'u' }] }).photos, [{ id: '', url: 'u', caption: '' }]);
     });
 
     test('NO_FEASIBLE_ROUTE and INCOMPLETE results parse', () => {

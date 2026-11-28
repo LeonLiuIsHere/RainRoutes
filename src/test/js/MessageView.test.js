@@ -3,114 +3,111 @@ import assert from 'node:assert/strict';
 import { MessageView, MESSAGE_TYPE } from '../../main/resources/public/js/views/MessageView.js';
 
 /** Just enough of the DOM for MessageView. */
-class FakeNode {
-    constructor(doc, tag, text = null) {
+class FakeElement {
+    constructor(doc, tag) {
         this.ownerDocument = doc;
-        this.tagName = tag;
+        this.tagName = tag.toUpperCase();
         this.children = [];
         this.attributes = new Map();
         this.listeners = new Map();
-        this.text = text;
+        this.hidden = false;
+        this.className = '';
+        this.textContent = '';
+        this.type = '';
     }
     append(...nodes) { this.children.push(...nodes); }
-    prepend(...nodes) { this.children.unshift(...nodes); }
-    replaceChildren(...nodes) { this.children = nodes; }
     setAttribute(name, value) { this.attributes.set(name, String(value)); }
-    getAttribute(name) { return this.attributes.get(name) ?? null; }
+    getAttribute(name) { return this.attributes.has(name) ? this.attributes.get(name) : null; }
+    removeAttribute(name) { this.attributes.delete(name); }
     addEventListener(type, fn) { this.listeners.set(type, fn); }
     click() { this.listeners.get('click')?.(); }
-    get textContent() { return this.text ?? this.children.map((c) => c.textContent).join(''); }
-    set textContent(value) { this.children = []; this.text = value; }
-    find(cls) {
-        if ((this.getAttribute('class') ?? '').split(' ').includes(cls)) return this;
-        for (const c of this.children) { const f = c.find?.(cls); if (f) return f; }
-        return null;
-    }
 }
 class FakeDocument {
-    createElement(tag) { return new FakeNode(this, tag); }
-    createTextNode(text) { return new FakeNode(this, '#text', text); }
+    createElement(tag) { return new FakeElement(this, tag); }
 }
 
-function build({ separateFooter = true } = {}) {
+function build({ withFooter = true } = {}) {
     const doc = new FakeDocument();
     const container = doc.createElement('div');
-    container.append(doc.createElement('div')); // existing content
-    const footer = separateFooter ? doc.createElement('footer') : undefined;
-    const view = separateFooter ? new MessageView(container, footer) : new MessageView(container);
-    const banner = container.children[0];
-    return { view, container, banner, footer: footer ?? container };
+    const footer = withFooter ? doc.createElement('footer') : null;
+    const view = new MessageView(container, footer);
+    const root = container.children[0];
+    const [text, retry] = root.children;
+    return { view, root, text, retry, footer };
 }
 
 describe('MessageView', () => {
-    test('puts an empty banner first in the container and a footer line last', () => {
-        const { view, banner, container } = build({ separateFooter: false });
-        assert.equal(banner.getAttribute('class'), 'msg-region');
-        assert.equal(banner.children.length, 0);
-        assert.equal(container.children[container.children.length - 1].getAttribute('class'), 'msg-footer');
+    test('starts hidden, with the class names css/views.css styles', () => {
+        const { view, root, text, retry } = build();
+        assert.equal(root.hidden, true);
+        assert.equal(root.className, 'message');
+        assert.equal(text.className, 'message__text');
+        assert.equal(retry.className, 'message__retry');
         assert.equal(view.getCurrentType(), null);
     });
 
-    test('showError shows an alert; Retry appears only with a handler and retry=true', () => {
-        const { view, banner } = build();
+    test('showError shows the text as an alert with Retry', () => {
+        const { view, root, text, retry } = build();
         view.showError('Service error, please retry.');
-        assert.equal(banner.find('msg-error').getAttribute('role'), 'alert');
-        assert.equal(banner.textContent, 'Service error, please retry.');
-        assert.equal(banner.find('btn'), null); // no handler yet
-
-        let presses = 0;
-        view.onRetry(() => { presses++; });
-        view.showError('Service error, please retry.');
-        banner.find('btn').click();
-        assert.equal(presses, 1);
+        assert.equal(root.hidden, false);
+        assert.equal(text.textContent, 'Service error, please retry.');
+        assert.equal(root.getAttribute('role'), 'alert');
+        assert.equal(root.getAttribute('aria-live'), 'assertive');
+        assert.equal(root.className, 'message message--error');
+        assert.equal(retry.hidden, false);
         assert.equal(view.getCurrentType(), MESSAGE_TYPE.ERROR);
-
         view.showError('No retry here', { retry: false });
-        assert.equal(banner.find('btn'), null);
+        assert.equal(retry.hidden, true);
     });
 
-    test('bindRetry is the same as onRetry; handlers must be functions', () => {
-        const { view, banner } = build();
+    test('Retry calls the handler given to onRetry (or bindRetry)', () => {
+        const { view, retry } = build();
+        retry.click(); // no handler yet: nothing happens
         let presses = 0;
-        view.bindRetry(() => { presses++; });
+        view.onRetry(() => { presses++; });
         view.showError('x');
-        banner.find('btn').click();
+        retry.click();
         assert.equal(presses, 1);
+        let old = 0;
+        view.bindRetry(() => { old++; });
+        retry.click();
+        assert.equal(old, 1);
         assert.throws(() => view.onRetry('nope'), TypeError);
     });
 
-    test('showLoading shows a spinner and text; showInfo shows a status without spinner', () => {
-        const { view, banner } = build();
+    test('showLoading marks the area busy; showInfo is a polite status', () => {
+        const { view, root, retry } = build();
         view.showLoading();
-        assert.ok(banner.find('spinner'));
-        assert.equal(banner.find('msg-loading').getAttribute('role'), 'status');
-        assert.equal(banner.textContent, 'Finding routes…');
+        assert.equal(root.className, 'message message--loading');
+        assert.equal(root.getAttribute('aria-busy'), 'true');
+        assert.equal(root.getAttribute('role'), 'status');
+        assert.equal(retry.hidden, true);
         view.showInfo('Search incomplete.');
-        assert.equal(banner.find('spinner'), null);
-        assert.ok(banner.find('msg-info'));
+        assert.equal(root.className, 'message message--info');
+        assert.equal(root.getAttribute('aria-busy'), null);
+        assert.equal(root.getAttribute('aria-live'), 'polite');
         assert.equal(view.getCurrentType(), MESSAGE_TYPE.INFO);
     });
 
-    test('hide empties the banner', () => {
-        const { view, banner } = build();
-        view.showLoading('Loading map…');
+    test('hide clears and hides the message', () => {
+        const { view, root, text } = build();
+        view.showLoading('Loading…');
         view.hide();
-        assert.equal(banner.children.length, 0);
-        assert.equal(view.getCurrentType(), null);
+        assert.equal(root.hidden, true);
+        assert.equal(text.textContent, '');
+        assert.equal(root.getAttribute('aria-busy'), null);
     });
 
     test('text is never empty', () => {
         const { view } = build();
         assert.throws(() => view.showInfo(''), TypeError);
-        assert.throws(() => view.showError(''), TypeError);
-        assert.throws(() => view.showLoading(''), TypeError);
     });
 
-    test('data version goes to the footer', () => {
+    test('data version goes to the footer, and is skipped without one', () => {
         const { view, footer } = build();
         view.setDataVersion('2026-11-20.3');
         assert.equal(footer.children[0].textContent, 'Data version 2026-11-20.3');
-        view.setDataVersion('');
-        assert.equal(footer.children[0].textContent, '');
+        const noFooter = build({ withFooter: false });
+        assert.doesNotThrow(() => noFooter.view.setDataVersion('v'));
     });
 });

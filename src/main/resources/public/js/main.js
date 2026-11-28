@@ -127,6 +127,7 @@ function createUi(views, elements, sheet) {
             sheet.scrollToTop();
         },
         setBusy(busy) {
+            views.home.setBusy(busy); // disables "Find routes" while searching
             elements.layout.toggleAttribute('aria-busy', busy);
         },
         onSearch: (handler) => views.home.onSearch(handler),
