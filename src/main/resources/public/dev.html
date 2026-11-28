@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hortons Rain Routes (views test page)</title>
+    <link rel="stylesheet" href="css/views.css">
+</head>
+<body>
+    <div id="app">
+        <div class="devbar">
+            <strong>Fake data</strong>
+            <label>Server answers:
+                <select id="scenario">
+                    <option value="two">two routes</option>
+                    <option value="same">same route</option>
+                    <option value="none">no route</option>
+                    <option value="error">service error</option>
+                </select>
+            </label>
+        </div>
+        <div id="map"></div>
+        <div id="layout" data-screen="plan">
+            <section class="panel-home" id="home"></section>
+            <section class="panel-cmp" id="cmp"></section>
+            <section class="panel-detail" id="detail"></section>
+            <div id="footer"></div>
+        </div>
+    </div>
+    <script type="module">
+        import { startDev } from './js/dev/devController.js';
+        const $ = (id) => document.getElementById(id);
+        startDev(
+            { app: $('app'), layout: $('layout'), home: $('home'), cmp: $('cmp'), detail: $('detail'), map: $('map'), footer: $('footer') },
+            () => $('scenario').value,
+        );
+    </script>
+</body>
+</html>
